@@ -1,25 +1,55 @@
-//lib/encryption.ts
-import crypto from 'crypto'
+// types/index.ts
 
-const ALGORITHM = 'aes-256-gcm'
-const KEY = Buffer.from(process.env.ENCRYPTION_KEY!, 'hex')
-
-export function encrypt(text: string): string {
-  const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv(ALGORITHM, KEY, iv)
-  let encrypted = cipher.update(text, 'utf8', 'hex')
-  encrypted += cipher.final('hex')
-  const authTag = cipher.getAuthTag()
-  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`
+export type TradeStats = {
+  netPnl: number
+  winRate: number
+  profitFactor: number
+  maxDrawdown: number
+  totalTrades: number
+  wins: number
+  losses: number
+  avgWin: number
+  avgLoss: number
+  expectancy: number
+  bestTrade: number
+  worstTrade: number
 }
 
-export function decrypt(encryptedText: string): string {
-  const [ivHex, authTagHex, encrypted] = encryptedText.split(':')
-  const iv = Buffer.from(ivHex, 'hex')
-  const authTag = Buffer.from(authTagHex, 'hex')
-  const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv)
-  decipher.setAuthTag(authTag)
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8')
-  decrypted += decipher.final('utf8')
-  return decrypted
+export type TradeSide = 'long' | 'short'
+export type TradeGrade = 'A+' | 'A' | 'B' | 'C' | 'D'
+export type TradeEmotion = 'calm' | 'fomo' | 'revenge' | 'confident' | 'anxious' | 'neutral'
+export type Environment = 'demo' | 'live'
+
+export type TradovateTokenResponse = {
+  accessToken: string
+  expirationTime: string
+  userId: number
+  name: string
+  userStatus: string
+}
+
+export type TradovateFill = {
+  id: number
+  contractId: number
+  timestamp: string
+  tradeDate: { year: number; month: number; day: number }
+  action: 'Buy' | 'Sell'
+  qty: number
+  price: number
+  orderId: number
+  buyerCommission: number
+  sellerCommission: number
+}
+
+export type TradovateAccount = {
+  id: number
+  name: string
+  userId: number
+  accountType: string
+  active: boolean
+  clearingHouseId: number
+  riskCategoryId: number
+  autoLiqProfileId: number
+  marginAccountType: string
+  legalStatus: string
 }

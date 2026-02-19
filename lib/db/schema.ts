@@ -1,57 +1,68 @@
-// src/lib/db/schema.ts
+// lib/db/schema.ts
 
-import { 
-  pgTable, uuid, text, integer, numeric, 
-  timestamp, json, boolean, pgEnum 
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  numeric,
+  timestamp,
+  json,
+  boolean,
+  pgEnum,
 } from 'drizzle-orm/pg-core'
 
-// ── Enums ────────────────────────────────
+// ── Enums ─────────────────────────────────────────────────
 export const sideEnum = pgEnum('side', ['long', 'short'])
 export const envEnum = pgEnum('environment', ['demo', 'live'])
 export const gradeEnum = pgEnum('grade', ['A+', 'A', 'B', 'C', 'D'])
+export const emotionEnum = pgEnum('emotion', ['calm', 'fomo', 'revenge', 'confident', 'anxious', 'neutral'])
 
-// ── Users ────────────────────────────────
+// ── Users ─────────────────────────────────────────────────
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: text('email').notNull().unique(),
-  password: text('password').notNull(),          // hashed with bcrypt
+  password: text('password').notNull(),
   name: text('name'),
   createdAt: timestamp('created_at').defaultNow(),
 })
 
-// ── Tradovate Connected Accounts ─────────
+// ── Tradovate Connected Accounts ──────────────────────────
 export const tradovateAccounts = pgTable('tradovate_accounts', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+
   tradovateUserId: integer('tradovate_user_id'),
   tradovateAccountId: integer('tradovate_account_id'),
   accountName: text('account_name'),
   environment: envEnum('environment').default('demo'),
-  
-  // Encrypted access token
+
+  // Stored encrypted — never plain text
   accessTokenEncrypted: text('access_token_encrypted'),
   tokenExpiresAt: timestamp('token_expires_at'),
-  
-  // Encrypted credentials for token refresh
   usernameEncrypted: text('username_encrypted'),
   passwordEncrypted: text('password_encrypted'),
-  
+
   lastSyncAt: timestamp('last_sync_at'),
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
 })
 
-// ── Trades ───────────────────────────────
+// ── Trades ────────────────────────────────────────────────
 export const trades = pgTable('trades', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
   tradovateAccountId: uuid('tradovate_account_id')
     .references(() => tradovateAccounts.id),
-  
-  // Deduplication key — prevents importing same trade twice
+
+  // Prevents importing the same trade twice
   tradovateTradeId: text('tradovate_trade_id').unique(),
-  
-  // Core trade data
+
+  // Core trade fields
   symbol: text('symbol').notNull(),
   side: sideEnum('side').notNull(),
   entryPrice: numeric('entry_price', { precision: 12, scale: 4 }).notNull(),
@@ -59,22 +70,26 @@ export const trades = pgTable('trades', {
   qty: integer('qty').notNull(),
   pnl: numeric('pnl', { precision: 12, scale: 2 }).notNull(),
   commission: numeric('commission', { precision: 8, scale: 2 }).default('0'),
-  
+
   entryTime: timestamp('entry_time').notNull(),
   exitTime: timestamp('exit_time').notNull(),
-  
-  // Journal fields (user fills these in)
+
+  // Journal fields — user fills these in after the trade
   tags: json('tags').$type<string[]>().default([]),
   notes: text('notes').default(''),
   grade: gradeEnum('grade'),
-  emotion: text('emotion'),                 // 'calm' | 'fomo' | 'revenge' | 'confident'
-  
+  emotion: emotionEnum('emotion'),
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 })
 
-// ── TypeScript Types ──────────────────────
+// ── TypeScript Types ───────────────────────────────────────
 export type User = typeof users.$inferSelect
+export type NewUser = typeof users.$inferInsert
+
 export type TradovateAccount = typeof tradovateAccounts.$inferSelect
+export type NewTradovateAccount = typeof tradovateAccounts.$inferInsert
+
 export type Trade = typeof trades.$inferSelect
 export type NewTrade = typeof trades.$inferInsert
