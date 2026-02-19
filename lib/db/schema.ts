@@ -1,0 +1,80 @@
+// src/lib/db/schema.ts
+
+import { 
+  pgTable, uuid, text, integer, numeric, 
+  timestamp, json, boolean, pgEnum 
+} from 'drizzle-orm/pg-core'
+
+// ── Enums ────────────────────────────────
+export const sideEnum = pgEnum('side', ['long', 'short'])
+export const envEnum = pgEnum('environment', ['demo', 'live'])
+export const gradeEnum = pgEnum('grade', ['A+', 'A', 'B', 'C', 'D'])
+
+// ── Users ────────────────────────────────
+export const users = pgTable('users', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  email: text('email').notNull().unique(),
+  password: text('password').notNull(),          // hashed with bcrypt
+  name: text('name'),
+  createdAt: timestamp('created_at').defaultNow(),
+})
+
+// ── Tradovate Connected Accounts ─────────
+export const tradovateAccounts = pgTable('tradovate_accounts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tradovateUserId: integer('tradovate_user_id'),
+  tradovateAccountId: integer('tradovate_account_id'),
+  accountName: text('account_name'),
+  environment: envEnum('environment').default('demo'),
+  
+  // Encrypted access token
+  accessTokenEncrypted: text('access_token_encrypted'),
+  tokenExpiresAt: timestamp('token_expires_at'),
+  
+  // Encrypted credentials for token refresh
+  usernameEncrypted: text('username_encrypted'),
+  passwordEncrypted: text('password_encrypted'),
+  
+  lastSyncAt: timestamp('last_sync_at'),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+})
+
+// ── Trades ───────────────────────────────
+export const trades = pgTable('trades', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tradovateAccountId: uuid('tradovate_account_id')
+    .references(() => tradovateAccounts.id),
+  
+  // Deduplication key — prevents importing same trade twice
+  tradovateTradeId: text('tradovate_trade_id').unique(),
+  
+  // Core trade data
+  symbol: text('symbol').notNull(),
+  side: sideEnum('side').notNull(),
+  entryPrice: numeric('entry_price', { precision: 12, scale: 4 }).notNull(),
+  exitPrice: numeric('exit_price', { precision: 12, scale: 4 }).notNull(),
+  qty: integer('qty').notNull(),
+  pnl: numeric('pnl', { precision: 12, scale: 2 }).notNull(),
+  commission: numeric('commission', { precision: 8, scale: 2 }).default('0'),
+  
+  entryTime: timestamp('entry_time').notNull(),
+  exitTime: timestamp('exit_time').notNull(),
+  
+  // Journal fields (user fills these in)
+  tags: json('tags').$type<string[]>().default([]),
+  notes: text('notes').default(''),
+  grade: gradeEnum('grade'),
+  emotion: text('emotion'),                 // 'calm' | 'fomo' | 'revenge' | 'confident'
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+})
+
+// ── TypeScript Types ──────────────────────
+export type User = typeof users.$inferSelect
+export type TradovateAccount = typeof tradovateAccounts.$inferSelect
+export type Trade = typeof trades.$inferSelect
+export type NewTrade = typeof trades.$inferInsert
