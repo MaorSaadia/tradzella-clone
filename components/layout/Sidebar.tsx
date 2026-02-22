@@ -11,6 +11,7 @@ import {
   Settings,
   TrendingUp,
   ChevronRight,
+  Upload,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -23,6 +24,12 @@ const NAV_ITEMS = [
       { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { href: '/journal', icon: BookOpen, label: 'Trade Journal' },
       { href: '/analytics', icon: BarChart3, label: 'Analytics' },
+    ],
+  },
+  {
+    label: 'Import',
+    items: [
+      { href: '/import', icon: Upload, label: 'Import CSV' },
     ],
   },
   {
@@ -49,7 +56,6 @@ export function Sidebar({ user }: SidebarProps) {
 
   return (
     <aside className="w-60 border-r border-border bg-card flex flex-col h-full shrink-0">
-
       {/* Logo */}
       <div className="h-16 flex items-center gap-2.5 px-5 border-b border-border">
         <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
@@ -84,12 +90,10 @@ export function Sidebar({ user }: SidebarProps) {
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                     )}
                   >
-                    <item.icon
-                      className={cn(
-                        'w-4 h-4 shrink-0',
-                        isActive ? 'text-emerald-500' : 'text-muted-foreground group-hover:text-foreground'
-                      )}
-                    />
+                    <item.icon className={cn(
+                      'w-4 h-4 shrink-0',
+                      isActive ? 'text-emerald-500' : 'text-muted-foreground group-hover:text-foreground'
+                    )} />
                     {item.label}
                     {isActive && (
                       <ChevronRight className="w-3 h-3 ml-auto text-emerald-500" />
@@ -102,7 +106,7 @@ export function Sidebar({ user }: SidebarProps) {
         ))}
       </nav>
 
-      {/* User profile at bottom */}
+      {/* User */}
       <div className="px-3 py-4 border-t border-border">
         <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-accent transition-colors cursor-default">
           <Avatar className="h-8 w-8">
@@ -111,12 +115,8 @@ export function Sidebar({ user }: SidebarProps) {
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">
-              {user.name ?? 'Trader'}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {user.email}
-            </p>
+            <p className="text-sm font-semibold truncate">{user.name ?? 'Trader'}</p>
+            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
         </div>
       </div>
