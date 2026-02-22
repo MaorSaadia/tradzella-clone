@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
 // components/layout/Sidebar.tsx
@@ -5,13 +6,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard,
-  BookOpen,
-  BarChart3,
-  Settings,
-  TrendingUp,
-  ChevronRight,
-  Upload,
+  LayoutDashboard, BookOpen, BarChart3,
+  Settings, TrendingUp, ChevronRight,
+  Upload, Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -21,9 +18,10 @@ const NAV_ITEMS = [
   {
     label: 'Overview',
     items: [
-      { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { href: '/journal', icon: BookOpen, label: 'Trade Journal' },
-      { href: '/analytics', icon: BarChart3, label: 'Analytics' },
+      { href: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard' },
+      { href: '/journal',    icon: BookOpen,         label: 'Trade Journal' },
+      { href: '/analytics',  icon: BarChart3,        label: 'Analytics' },
+      { href: '/propfirms',  icon: Building2,        label: 'Prop Firms', badge: 'NEW' },
     ],
   },
   {
@@ -41,10 +39,7 @@ const NAV_ITEMS = [
 ]
 
 interface SidebarProps {
-  user: {
-    name?: string | null
-    email?: string | null
-  }
+  user: { name?: string | null; email?: string | null }
 }
 
 export function Sidebar({ user }: SidebarProps) {
@@ -64,9 +59,7 @@ export function Sidebar({ user }: SidebarProps) {
         <span className="text-lg font-black tracking-tight">
           Trad<span className="text-emerald-500">Zella</span>
         </span>
-        <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
-          BETA
-        </Badge>
+        <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">BETA</Badge>
       </div>
 
       {/* Nav */}
@@ -77,12 +70,10 @@ export function Sidebar({ user }: SidebarProps) {
               {group.label}
             </p>
             <div className="space-y-0.5">
-              {group.items.map(item => {
+              {group.items.map((item: any) => {
                 const isActive = pathname === item.href
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
+                  <Link key={item.href} href={item.href}
                     className={cn(
                       'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group',
                       isActive
@@ -90,12 +81,16 @@ export function Sidebar({ user }: SidebarProps) {
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                     )}
                   >
-                    <item.icon className={cn(
-                      'w-4 h-4 shrink-0',
+                    <item.icon className={cn('w-4 h-4 shrink-0',
                       isActive ? 'text-emerald-500' : 'text-muted-foreground group-hover:text-foreground'
                     )} />
                     {item.label}
-                    {isActive && (
+                    {item.badge && (
+                      <span className="ml-auto text-[9px] font-bold bg-emerald-500/20 text-emerald-500 px-1.5 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                    {isActive && !item.badge && (
                       <ChevronRight className="w-3 h-3 ml-auto text-emerald-500" />
                     )}
                   </Link>
