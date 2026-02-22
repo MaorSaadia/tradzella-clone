@@ -7,7 +7,6 @@ const BASE_URLS: Record<Environment, string> = {
   live: 'https://live.tradovateapi.com/v1',
 }
 
-// ── Core fetch wrapper ────────────────────────────────────
 export async function tradovateRequest<T>(
   endpoint: string,
   token: string,
@@ -33,12 +32,17 @@ export async function tradovateRequest<T>(
 }
 
 // ── Request a new access token ────────────────────────────
+// Requires real cid + sec from Tradovate Settings → API Access
 export async function requestToken(
   username: string,
   password: string,
-  environment: Environment
+  environment: Environment,
+  cid: number,
+  sec: string
 ): Promise<TradovateTokenResponse> {
-  const res = await fetch(`${BASE_URLS[environment]}/auth/accesstokenrequest`, {
+  const url = `${BASE_URLS[environment]}/auth/accesstokenrequest`
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -47,24 +51,33 @@ export async function requestToken(
       appId: 'TradZella',
       appVersion: '1.0',
       deviceId: 'tradzella-server',
-      cid: 0,
-      sec: '',
+      cid,      // real numeric CID from Tradovate API settings
+      sec,      // real UUID secret from Tradovate API settings
     }),
   })
 
-  if (!res.ok) {
-    throw new Error('Invalid Tradovate credentials. Please check your username and password.')
-  }
-
   const data = await res.json()
 
-  // Tradovate returns p-ticket error in 200 response if credentials wrong
+  // Tradovate returns a p-ticket object when MFA / device approval is needed
   if (data['p-ticket']) {
-    throw new Error('Invalid Tradovate credentials.')
+    throw new Error(
+      'Tradovate requires device approval. Please log in to tradovate.com, ' +
+      'check your email for a device approval link, approve it, then try again.'
+    )
+  }
+
+  // Bad credentials return a non-200 with an error message
+  if (!res.ok) {
+    throw new Error(
+      data.errorText ?? data.error ?? 'Invalid Tradovate credentials'
+    )
   }
 
   if (!data.accessToken) {
-    throw new Error('Tradovate did not return an access token.')
+    throw new Error(
+      'Tradovate did not return an access token. ' +
+      'Please check your username, password, CID and Secret are all correct.'
+    )
   }
 
   return data
@@ -87,7 +100,7 @@ export async function renewToken(
   return res.json()
 }
 
-// ── Get all accounts for a user ───────────────────────────
+// ── Get all accounts for the authenticated user ───────────
 export async function getAccounts(
   token: string,
   environment: Environment

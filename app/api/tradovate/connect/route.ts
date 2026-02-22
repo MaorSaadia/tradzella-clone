@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // app/api/tradovate/connect/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,6 +13,8 @@ import { z } from 'zod'
 const connectSchema = z.object({
   username: z.string().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
+  cid: z.coerce.number().int('CID must be an integer'),
+  secret: z.string().min(1, 'API Secret is required'),
   environment: z.enum(['demo', 'live']),
 })
 
@@ -23,10 +26,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { username, password, environment } = connectSchema.parse(body)
+    const { username, password, cid, secret, environment } = connectSchema.parse(body)
 
-    // 1. Authenticate with Tradovate
-    const tokenData = await requestToken(username, password, environment)
+    // 1. Authenticate with Tradovate using real cid + secret
+    const tokenData = await requestToken(username, password, environment, cid, secret)
 
     // 2. Get account list
     const accountList = await getAccounts(tokenData.accessToken, environment)
@@ -38,10 +41,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Use first account (most prop firms give one account per login)
     const tradovateAccount = accountList[0]
 
-    // 3. Check if already connected — update instead of duplicate
+    // 3. Upsert — update if already connected, create if new
     const existing = await db.query.tradovateAccounts.findFirst({
       where: and(
         eq(tradovateAccounts.userId, session.user.id),
@@ -57,15 +59,17 @@ export async function POST(req: NextRequest) {
       environment,
       accessTokenEncrypted: encrypt(tokenData.accessToken),
       tokenExpiresAt: new Date(tokenData.expirationTime),
+      // Encrypt all sensitive fields
       usernameEncrypted: encrypt(username),
       passwordEncrypted: encrypt(password),
+      cidEncrypted: encrypt(String(cid)),
+      secretEncrypted: encrypt(secret),
       isActive: true,
     }
 
     let savedAccount
 
     if (existing) {
-      // Update existing connection
       const [updated] = await db
         .update(tradovateAccounts)
         .set(accountData)
@@ -73,7 +77,6 @@ export async function POST(req: NextRequest) {
         .returning()
       savedAccount = updated
     } else {
-      // Create new connection
       const [created] = await db
         .insert(tradovateAccounts)
         .values(accountData)
@@ -92,9 +95,8 @@ export async function POST(req: NextRequest) {
     })
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors[0].message }, { status: 400 })
+      return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
     }
-
     console.error('[connect] Error:', error.message)
     return NextResponse.json(
       { error: error.message || 'Connection failed' },
