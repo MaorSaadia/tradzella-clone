@@ -3,21 +3,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import type { Trade } from './db/schema'
-
-export interface TradeStats {
-  netPnl: number
-  winRate: number
-  profitFactor: number
-  maxDrawdown: number
-  totalTrades: number
-  wins: number
-  losses: number
-  avgWin: number
-  avgLoss: number
-  expectancy: number
-  bestTrade: number
-  worstTrade: number
-}
+import type { TradeStats } from '@/types'
 
 // ── shadcn helper (already added by shadcn init, but keep it here) ──
 export function cn(...inputs: ClassValue[]) {
