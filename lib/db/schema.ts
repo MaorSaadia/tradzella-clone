@@ -1,4 +1,4 @@
-// lib/db/schema.ts — with relations defined for Drizzle `with` queries
+// lib/db/schema.ts — COMPLETE FINAL VERSION
 
 import {
   pgTable, uuid, text, integer, numeric,
@@ -6,15 +6,21 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
-// ── Enums ─────────────────────────────────────────────────
+// ── Enums ──────────────────────────────────────────────────
 export const sideEnum = pgEnum('side', ['long', 'short'])
 export const envEnum = pgEnum('environment', ['demo', 'live'])
 export const gradeEnum = pgEnum('grade', ['A+', 'A', 'B', 'C', 'D'])
 export const emotionEnum = pgEnum('emotion', ['calm', 'fomo', 'revenge', 'confident', 'anxious', 'neutral'])
 export const challengeStageEnum = pgEnum('challenge_stage', ['evaluation', 'phase2', 'funded', 'failed', 'passed'])
 export const firmStatusEnum = pgEnum('firm_status', ['active', 'passed', 'failed', 'paused'])
+export const playbookStatusEnum = pgEnum('playbook_status', ['active', 'paused', 'retired'])
+export const mistakeTypeEnum = pgEnum('mistake_type', [
+  'fomo_entry', 'revenge_trade', 'oversized_position', 'no_setup',
+  'moved_stop', 'held_through_news', 'overtraded', 'early_exit',
+  'late_exit', 'broke_daily_limit', 'chased_price', 'custom',
+])
 
-// ── Users ─────────────────────────────────────────────────
+// ── Users ──────────────────────────────────────────────────
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: text('email').notNull().unique(),
@@ -28,9 +34,11 @@ export const usersRelations = relations(users, ({ many }) => ({
   tradovateAccounts: many(tradovateAccounts),
   propFirms: many(propFirms),
   propFirmAccounts: many(propFirmAccounts),
+  playbooks: many(playbooks),
+  tradeMistakes: many(tradeMistakes),
 }))
 
-// ── Tradovate Accounts ────────────────────────────────────
+// ── Tradovate Accounts ─────────────────────────────────────
 export const tradovateAccounts = pgTable('tradovate_accounts', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -53,7 +61,7 @@ export const tradovateAccountsRelations = relations(tradovateAccounts, ({ one })
   user: one(users, { fields: [tradovateAccounts.userId], references: [users.id] }),
 }))
 
-// ── Prop Firms ────────────────────────────────────────────
+// ── Prop Firms ─────────────────────────────────────────────
 export const propFirms = pgTable('prop_firms', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -68,7 +76,7 @@ export const propFirmsRelations = relations(propFirms, ({ one, many }) => ({
   accounts: many(propFirmAccounts),
 }))
 
-// ── Prop Firm Accounts ────────────────────────────────────
+// ── Prop Firm Accounts ─────────────────────────────────────
 export const propFirmAccounts = pgTable('prop_firm_accounts', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -99,12 +107,53 @@ export const propFirmAccountsRelations = relations(propFirmAccounts, ({ one, man
   trades: many(trades),
 }))
 
-// ── Trades ────────────────────────────────────────────────
+// ── Playbooks ──────────────────────────────────────────────
+export const playbooks = pgTable('playbooks', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description').default(''),
+  category: text('category').default(''),
+  color: text('color').default('#10b981'),
+  emoji: text('emoji').default('📈'),
+  entryRules: json('entry_rules').$type<string[]>().default([]),
+  exitRules: json('exit_rules').$type<string[]>().default([]),
+  riskRules: json('risk_rules').$type<string[]>().default([]),
+  idealRR: numeric('ideal_rr', { precision: 4, scale: 2 }),
+  maxLossPerTrade: numeric('max_loss_per_trade', { precision: 10, scale: 2 }),
+  status: playbookStatusEnum('status').default('active'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+})
+
+export const playbooksRelations = relations(playbooks, ({ one, many }) => ({
+  user: one(users, { fields: [playbooks.userId], references: [users.id] }),
+  trades: many(trades),
+}))
+
+// ── Trade Mistakes ─────────────────────────────────────────
+export const tradeMistakes = pgTable('trade_mistakes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tradeId: uuid('trade_id').notNull().references(() => trades.id, { onDelete: 'cascade' }),
+  mistakeType: mistakeTypeEnum('mistake_type').notNull(),
+  description: text('description').default(''),
+  severity: integer('severity').default(1),
+  createdAt: timestamp('created_at').defaultNow(),
+})
+
+export const tradeMistakesRelations = relations(tradeMistakes, ({ one }) => ({
+  user: one(users, { fields: [tradeMistakes.userId], references: [users.id] }),
+  trade: one(trades, { fields: [tradeMistakes.tradeId], references: [trades.id] }),
+}))
+
+// ── Trades ─────────────────────────────────────────────────
 export const trades = pgTable('trades', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   tradovateAccountId: uuid('tradovate_account_id').references(() => tradovateAccounts.id),
   propFirmAccountId: uuid('prop_firm_account_id').references(() => propFirmAccounts.id, { onDelete: 'set null' }),
+  playbookId: uuid('playbook_id').references(() => playbooks.id, { onDelete: 'set null' }),
   tradovateTradeId: text('tradovate_trade_id').unique(),
   symbol: text('symbol').notNull(),
   side: sideEnum('side').notNull(),
@@ -119,24 +168,30 @@ export const trades = pgTable('trades', {
   notes: text('notes').default(''),
   grade: gradeEnum('grade'),
   emotion: emotionEnum('emotion'),
+  isMistake: boolean('is_mistake').default(false),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 })
 
-export const tradesRelations = relations(trades, ({ one }) => ({
+export const tradesRelations = relations(trades, ({ one, many }) => ({
   user: one(users, { fields: [trades.userId], references: [users.id] }),
   propFirmAccount: one(propFirmAccounts, { fields: [trades.propFirmAccountId], references: [propFirmAccounts.id] }),
   tradovateAccount: one(tradovateAccounts, { fields: [trades.tradovateAccountId], references: [tradovateAccounts.id] }),
+  playbook: one(playbooks, { fields: [trades.playbookId], references: [playbooks.id] }),
+  mistakes: many(tradeMistakes),
 }))
 
-// ── Types ─────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type TradovateAccount = typeof tradovateAccounts.$inferSelect
-export type NewTradovateAccount = typeof tradovateAccounts.$inferInsert
 export type PropFirm = typeof propFirms.$inferSelect
 export type NewPropFirm = typeof propFirms.$inferInsert
 export type PropFirmAccount = typeof propFirmAccounts.$inferSelect
 export type NewPropFirmAccount = typeof propFirmAccounts.$inferInsert
+export type Playbook = typeof playbooks.$inferSelect
+export type NewPlaybook = typeof playbooks.$inferInsert
+export type TradeMistake = typeof tradeMistakes.$inferSelect
+export type NewTradeMistake = typeof tradeMistakes.$inferInsert
 export type Trade = typeof trades.$inferSelect
 export type NewTrade = typeof trades.$inferInsert

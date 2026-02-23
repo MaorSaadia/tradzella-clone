@@ -1,58 +1,40 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// app/api/trades/[id]/route.ts
+// app/api/trades/[id]/route.ts  (add PATCH handler — merge with existing if you have one)
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { trades } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { z } from 'zod'
 
-const patchSchema = z.object({
-  grade: z.enum(['A+', 'A', 'B', 'C', 'D']).nullable().optional(),
-  emotion: z.enum(['calm', 'fomo', 'revenge', 'confident', 'anxious', 'neutral']).nullable().optional(),
-  tags: z.array(z.string()).optional(),
-  notes: z.string().optional(),
-})
-
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
-    const { id } = await params
     const body = await req.json()
-    const data = patchSchema.parse(body)
+    const {
+      notes, tags, grade, emotion,
+      playbookId, isMistake,
+      propFirmAccountId,
+    } = body
 
-    const [updated] = await db
-      .update(trades)
+    const [updated] = await db.update(trades)
       .set({
-        ...data,
+        ...(notes !== undefined && { notes }),
+        ...(tags !== undefined && { tags }),
+        ...(grade !== undefined && { grade }),
+        ...(emotion !== undefined && { emotion }),
+        ...(playbookId !== undefined && { playbookId: playbookId || null }),
+        ...(isMistake !== undefined && { isMistake }),
+        ...(propFirmAccountId !== undefined && { propFirmAccountId: propFirmAccountId || null }),
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(trades.id, id),
-          eq(trades.userId, session.user.id) // ensure user owns this trade
-        )
-      )
+      .where(and(eq(trades.id, params.id), eq(trades.userId, session.user.id)))
       .returning()
 
-    if (!updated) {
-      return NextResponse.json({ error: 'Trade not found' }, { status: 404 })
-    }
-
-    return NextResponse.json({ success: true, trade: updated })
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
-    }
-    console.error('[trade patch] Error:', error.message)
-    return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+    if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json(updated)
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

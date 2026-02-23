@@ -1,31 +1,35 @@
-// app/(dashboard)/layout.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// app/(dashboard)/layout.tsx — FINAL VERSION with AlertBanner
 
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { propFirms } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { propFirms, trades } from '@/lib/db/schema'
+import { eq, desc } from 'drizzle-orm'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { AccountProvider } from '@/components/layout/AccountContext'
+import { AlertBannerWrapper } from '@/components/layout/AlertBannerWrapper'
 import type { AccountOption } from '@/components/layout/AccountContext'
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
 
-  // Load all prop firm accounts for the switcher
   const firms = await db.query.propFirms.findMany({
     where: eq(propFirms.userId, session.user.id),
     with: { accounts: true },
   })
 
-  // Flatten into AccountOption list
+  const allTrades = await db.query.trades.findMany({
+    where: eq(trades.userId, session.user.id),
+    orderBy: [desc(trades.exitTime)],
+  })
+
+  // Build account options for the switcher
   const accountOptions: AccountOption[] = []
+  const accountDetails: Record<string, any> = {}
+
   firms.forEach(firm => {
     firm.accounts.forEach(acc => {
       accountOptions.push({
@@ -37,6 +41,7 @@ export default async function DashboardLayout({
         stage: acc.stage ?? 'evaluation',
         accountSize: Number(acc.accountSize),
       })
+      accountDetails[acc.id] = acc
     })
   })
 
@@ -46,6 +51,8 @@ export default async function DashboardLayout({
         <Sidebar user={{ name: session.user.name, email: session.user.email }} />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header user={{ name: session.user.name, email: session.user.email }} />
+          {/* Alert banner below header — only shows when limits are near */}
+          <AlertBannerWrapper allTrades={allTrades} accountDetails={accountDetails} />
           <main className="flex-1 overflow-y-auto p-6">
             {children}
           </main>
