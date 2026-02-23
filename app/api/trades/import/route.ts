@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 // app/api/trades/import/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,6 +18,7 @@ const tradeSchema = z.object({
   entryTime: z.string(),
   exitTime: z.string(),
   tradovateTradeId: z.string(),
+  propFirmAccountId: z.string().uuid().nullable().optional(),
 })
 
 const importSchema = z.object({
@@ -25,59 +27,40 @@ const importSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const body = await req.json()
     const { trades: incoming } = importSchema.parse(body)
 
-    let imported = 0
-    let skipped = 0
+    let imported = 0, skipped = 0
 
     for (const trade of incoming) {
       try {
-        const result = await db
-          .insert(trades)
-          .values({
-            userId: session.user.id,
-            tradovateTradeId: trade.tradovateTradeId,
-            symbol: trade.symbol,
-            side: trade.side,
-            entryPrice: trade.entryPrice,
-            exitPrice: trade.exitPrice,
-            qty: trade.qty,
-            pnl: trade.pnl,
-            commission: '0',
-            entryTime: new Date(trade.entryTime),
-            exitTime: new Date(trade.exitTime),
-            tags: [],
-            notes: '',
-          })
-          .onConflictDoNothing() // skip if tradovateTradeId already exists
+        const result = await db.insert(trades).values({
+          userId: session.user.id,
+          tradovateTradeId: trade.tradovateTradeId,
+          symbol: trade.symbol,
+          side: trade.side,
+          entryPrice: trade.entryPrice,
+          exitPrice: trade.exitPrice,
+          qty: trade.qty,
+          pnl: trade.pnl,
+          commission: '0',
+          entryTime: new Date(trade.entryTime),
+          exitTime: new Date(trade.exitTime),
+          propFirmAccountId: trade.propFirmAccountId ?? null,
+          tags: [],
+          notes: '',
+        }).onConflictDoNothing()
 
-        if (result.rowCount && result.rowCount > 0) {
-          imported++
-        } else {
-          skipped++
-        }
-      } catch {
-        skipped++
-      }
+        result.rowCount && result.rowCount > 0 ? imported++ : skipped++
+      } catch { skipped++ }
     }
 
-    return NextResponse.json({
-      success: true,
-      imported,
-      skipped,
-      total: incoming.length,
-    })
+    return NextResponse.json({ success: true, imported, skipped, total: incoming.length })
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
-    }
-    console.error('[import] Error:', error.message)
+    if (error.name === 'ZodError') return NextResponse.json({ error: error.errors[0].message }, { status: 400 })
     return NextResponse.json({ error: 'Import failed' }, { status: 500 })
   }
 }

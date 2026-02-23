@@ -7,13 +7,12 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronDown, ChevronUp, Trash2,
-  AlertTriangle, CheckCircle2, XCircle, Clock, 
+  AlertTriangle, CheckCircle2, XCircle, Clock,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency, calcTrailingDrawdown } from '@/lib/utils'
 import type { PropFirm, PropFirmAccount, Trade } from '@/lib/db/schema'
 
 interface FirmWithAccounts extends PropFirm {
@@ -33,34 +32,42 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
-  active:  { label: 'Active',  color: 'border-blue-500/40 text-blue-400 bg-blue-500/5',    icon: Clock },
+  active:  { label: 'Active',  color: 'border-blue-500/40 text-blue-400 bg-blue-500/5',          icon: Clock },
   passed:  { label: 'Passed',  color: 'border-emerald-500/40 text-emerald-500 bg-emerald-500/5', icon: CheckCircle2 },
-  failed:  { label: 'Failed',  color: 'border-red-500/40 text-red-500 bg-red-500/5',        icon: XCircle },
-  paused:  { label: 'Paused',  color: 'border-yellow-500/40 text-yellow-500 bg-yellow-500/5', icon: Clock },
+  failed:  { label: 'Failed',  color: 'border-red-500/40 text-red-500 bg-red-500/5',              icon: XCircle },
+  paused:  { label: 'Paused',  color: 'border-yellow-500/40 text-yellow-500 bg-yellow-500/5',    icon: Clock },
 }
 
-const FIRM_COLORS = [
-  '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b',
-  '#ef4444', '#06b6d4', '#ec4899', '#84cc16',
-]
-
-// ── Calculate live progress for one account ───────────────
+// ── Calculate progress for one account ────────────────────
 function calcProgress(account: PropFirmAccount, trades: Trade[]) {
   const accountTrades = trades.filter(t => t.propFirmAccountId === account.id)
+
+  // Net closed P&L
   const pnl = accountTrades.reduce((s, t) => s + Number(t.pnl), 0)
 
+  // Trading days
   const tradingDays = new Set(
     accountTrades.map(t => new Date(t.exitTime).toDateString())
   ).size
 
-  // Daily P&L map
+  // Daily P&L map (for daily loss limit)
   const dailyMap: Record<string, number> = {}
   accountTrades.forEach(t => {
     const day = new Date(t.exitTime).toDateString()
     dailyMap[day] = (dailyMap[day] ?? 0) + Number(t.pnl)
   })
-  const worstDay = Math.min(...Object.values(dailyMap), 0)
-  const bestDay = Math.max(...Object.values(dailyMap), 0)
+  const dailyValues = Object.values(dailyMap)
+  const worstDay = dailyValues.length ? Math.min(...dailyValues) : 0
+  const bestDay = dailyValues.length ? Math.max(...dailyValues) : 0
+
+  // ── Trailing drawdown (the real prop firm way) ────────────
+  // Uses peak-tracking across sorted closed trades.
+  // For Apex-style trailing DD: floor moves up as peak moves up.
+  const {
+    currentDrawdownUsed: trailingDrawdownUsed,
+    maxTrailingDrawdown,
+    peakBalance,
+  } = calcTrailingDrawdown(accountTrades)
 
   const profitTarget = Number(account.profitTarget ?? 0)
   const maxDD = Number(account.maxDrawdown ?? 0)
@@ -68,21 +75,22 @@ function calcProgress(account: PropFirmAccount, trades: Trade[]) {
   const minDays = account.minTradingDays ?? 0
 
   // Progress percentages
-  const profitPct = profitTarget > 0 ? Math.min((pnl / profitTarget) * 100, 100) : 0
-  const drawdownPct = maxDD > 0 ? Math.min((Math.abs(Math.min(pnl, 0)) / maxDD) * 100, 100) : 0
+  const profitPct = profitTarget > 0 ? Math.min(Math.max((pnl / profitTarget) * 100, 0), 100) : 0
+  const drawdownPct = maxDD > 0 ? Math.min((trailingDrawdownUsed / maxDD) * 100, 100) : 0
   const dailyLossPct = dailyLimit > 0 ? Math.min((Math.abs(Math.min(worstDay, 0)) / dailyLimit) * 100, 100) : 0
   const daysPct = minDays > 0 ? Math.min((tradingDays / minDays) * 100, 100) : 100
 
-  // Alerts
+  // Risk flags
   const isNearDD = drawdownPct >= 75
   const isNearDaily = dailyLossPct >= 75
-  const hasPassedTarget = pnl >= profitTarget && profitTarget > 0
-  const hasHitDDLimit = maxDD > 0 && pnl <= -maxDD
+  const hasHitDDLimit = maxDD > 0 && trailingDrawdownUsed >= maxDD
+  const hasPassedTarget = profitTarget > 0 && pnl >= profitTarget
 
   return {
     pnl, tradingDays, worstDay, bestDay,
+    trailingDrawdownUsed, maxTrailingDrawdown, peakBalance,
     profitPct, drawdownPct, dailyLossPct, daysPct,
-    isNearDD, isNearDaily, hasPassedTarget, hasHitDDLimit,
+    isNearDD, isNearDaily, hasHitDDLimit, hasPassedTarget,
     tradeCount: accountTrades.length,
   }
 }
@@ -91,7 +99,7 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
   const [expanded, setExpanded] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const color = firm.logoColor ?? FIRM_COLORS[0]
+  const color = firm.logoColor ?? '#10b981'
 
   async function handleDeleteAccount(accountId: string) {
     if (!confirm('Delete this account? Linked trades will be unlinked.')) return
@@ -129,7 +137,6 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
       {/* Firm header */}
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          {/* Logo avatar */}
           <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-black shrink-0"
             style={{ background: color }}>
             {(firm.shortName ?? firm.name).slice(0, 2).toUpperCase()}
@@ -169,7 +176,7 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {firm.accounts.map(account => {
-                const progress = calcProgress(account, allTrades)
+                const p = calcProgress(account, allTrades)
                 const statusCfg = STATUS_CONFIG[account.status ?? 'active']
                 const StatusIcon = statusCfg.icon
 
@@ -189,7 +196,6 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* Status badge — clickable to cycle */}
                         <Badge variant="outline" className={cn('gap-1 text-xs cursor-pointer', statusCfg.color)}
                           onClick={() => {
                             const cycle: Record<string, string> = { active: 'passed', passed: 'failed', failed: 'paused', paused: 'active' }
@@ -206,41 +212,29 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
                       </div>
                     </div>
 
-                    {/* Alerts */}
-                    {(progress.isNearDD || progress.isNearDaily || progress.hasHitDDLimit) && (
+                    {/* Alert banners */}
+                    {(p.hasHitDDLimit || p.isNearDD || p.isNearDaily) && (
                       <div className={cn(
                         'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold',
-                        progress.hasHitDDLimit
+                        p.hasHitDDLimit
                           ? 'bg-red-500/15 text-red-500 border border-red-500/30'
                           : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
                       )}>
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        {progress.hasHitDDLimit
-                          ? '🚨 Max drawdown hit — account may be breached!'
-                          : progress.isNearDD
-                            ? `⚠️ Near max drawdown (${progress.drawdownPct.toFixed(0)}% used)`
-                            : `⚠️ Near daily loss limit (${progress.dailyLossPct.toFixed(0)}% used)`}
+                        {p.hasHitDDLimit
+                          ? '🚨 Trailing drawdown limit reached — account may be breached!'
+                          : p.isNearDD
+                            ? `⚠️ Near trailing drawdown limit (${p.drawdownPct.toFixed(0)}% used)`
+                            : `⚠️ Near daily loss limit (${p.dailyLossPct.toFixed(0)}% used)`}
                       </div>
                     )}
 
-                    {/* P&L summary */}
+                    {/* P&L summary strip */}
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        {
-                          label: 'Net P&L',
-                          value: formatCurrency(progress.pnl),
-                          color: progress.pnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-                        },
-                        {
-                          label: 'Best Day',
-                          value: `+$${progress.bestDay.toFixed(0)}`,
-                          color: 'text-emerald-500'
-                        },
-                        {
-                          label: 'Worst Day',
-                          value: `$${progress.worstDay.toFixed(0)}`,
-                          color: 'text-red-500'
-                        },
+                        { label: 'Net P&L',   value: formatCurrency(p.pnl),      color: p.pnl >= 0 ? 'text-emerald-500' : 'text-red-500' },
+                        { label: 'Best Day',  value: `+$${p.bestDay.toFixed(0)}`, color: 'text-emerald-500' },
+                        { label: 'Worst Day', value: `$${p.worstDay.toFixed(0)}`, color: 'text-red-500' },
                       ].map(s => (
                         <div key={s.label} className="bg-muted/30 rounded-lg p-2 text-center">
                           <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">{s.label}</p>
@@ -249,7 +243,7 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
                       ))}
                     </div>
 
-                    {/* Progress bars */}
+                    {/* ── Progress bars ── */}
                     <div className="space-y-3">
 
                       {/* Profit Target */}
@@ -257,60 +251,79 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
                         <div>
                           <div className="flex justify-between text-[10px] mb-1">
                             <span className="text-muted-foreground">Profit Target</span>
-                            <span className={cn('font-bold', progress.pnl >= 0 ? 'text-emerald-500' : 'text-muted-foreground')}>
-                              {formatCurrency(progress.pnl)} / {formatCurrency(Number(account.profitTarget))}
+                            <span className={cn('font-bold', p.pnl >= 0 ? 'text-emerald-500' : 'text-muted-foreground')}>
+                              {formatCurrency(p.pnl)} / {formatCurrency(Number(account.profitTarget))}
                             </span>
                           </div>
-                          <Progress value={Math.max(0, progress.profitPct)} className="h-1.5"
-                            style={{ '--progress-color': '#10b981' } as any} />
+                          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-emerald-500 transition-all"
+                              style={{ width: `${Math.max(0, p.profitPct)}%` }} />
+                          </div>
                         </div>
                       )}
 
-                      {/* Max Drawdown */}
+                      {/* Trailing / Static Drawdown */}
                       {Number(account.maxDrawdown) > 0 && (
                         <div>
                           <div className="flex justify-between text-[10px] mb-1">
-                            <span className="text-muted-foreground">
-                              Max Drawdown {account.isTrailingDrawdown ? '(trailing)' : '(static)'}
-                            </span>
-                            <span className={cn('font-bold',
-                              progress.drawdownPct >= 75 ? 'text-red-500' : 'text-muted-foreground'
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground">
+                                Max Drawdown {account.isTrailingDrawdown ? '(trailing)' : '(static)'}
+                              </span>
+                              {account.isTrailingDrawdown && (
+                                <span className="text-[8px] bg-blue-500/10 text-blue-400 px-1 rounded">
+                                  floor moves up
+                                </span>
+                              )}
+                            </div>
+                            <span className={cn('font-bold tabular-nums',
+                              p.drawdownPct >= 75 ? 'text-red-500' : 'text-muted-foreground'
                             )}>
-                              {formatCurrency(Math.abs(Math.min(progress.pnl, 0)))} / {formatCurrency(Number(account.maxDrawdown))}
+                              {/* Show: current DD used / limit */}
+                              {account.isTrailingDrawdown
+                                ? `$${p.trailingDrawdownUsed.toFixed(2)} / $${Number(account.maxDrawdown).toFixed(2)}`
+                                : `$${Math.abs(Math.min(p.pnl, 0)).toFixed(2)} / $${Number(account.maxDrawdown).toFixed(2)}`
+                              }
                             </span>
                           </div>
                           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                             <div
                               className={cn('h-full rounded-full transition-all',
-                                progress.drawdownPct >= 90 ? 'bg-red-500'
-                                  : progress.drawdownPct >= 75 ? 'bg-amber-500'
+                                p.drawdownPct >= 90 ? 'bg-red-500'
+                                  : p.drawdownPct >= 75 ? 'bg-amber-500'
                                     : 'bg-blue-500'
                               )}
-                              style={{ width: `${progress.drawdownPct}%` }}
+                              style={{ width: `${p.drawdownPct}%` }}
                             />
                           </div>
+                          {/* Trailing DD tooltip info */}
+                          {account.isTrailingDrawdown && p.peakBalance > 0 && (
+                            <p className="text-[9px] text-muted-foreground mt-0.5">
+                              Peak: +${p.peakBalance.toFixed(2)} · Floor moved up by ${p.peakBalance.toFixed(2)}
+                            </p>
+                          )}
                         </div>
                       )}
 
-                      {/* Daily Loss */}
+                      {/* Daily Loss Limit */}
                       {Number(account.dailyLossLimit) > 0 && (
                         <div>
                           <div className="flex justify-between text-[10px] mb-1">
-                            <span className="text-muted-foreground">Daily Loss Limit</span>
-                            <span className={cn('font-bold',
-                              progress.dailyLossPct >= 75 ? 'text-amber-500' : 'text-muted-foreground'
+                            <span className="text-muted-foreground">Daily Loss Limit (worst day)</span>
+                            <span className={cn('font-bold tabular-nums',
+                              p.dailyLossPct >= 75 ? 'text-amber-500' : 'text-muted-foreground'
                             )}>
-                              {formatCurrency(Math.abs(Math.min(progress.worstDay, 0)))} / {formatCurrency(Number(account.dailyLossLimit))}
+                              ${Math.abs(Math.min(p.worstDay, 0)).toFixed(2)} / ${Number(account.dailyLossLimit).toFixed(2)}
                             </span>
                           </div>
                           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                             <div
                               className={cn('h-full rounded-full transition-all',
-                                progress.dailyLossPct >= 90 ? 'bg-red-500'
-                                  : progress.dailyLossPct >= 75 ? 'bg-amber-500'
+                                p.dailyLossPct >= 90 ? 'bg-red-500'
+                                  : p.dailyLossPct >= 75 ? 'bg-amber-500'
                                     : 'bg-purple-500'
                               )}
-                              style={{ width: `${progress.dailyLossPct}%` }}
+                              style={{ width: `${p.dailyLossPct}%` }}
                             />
                           </div>
                         </div>
@@ -321,13 +334,13 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
                         <div>
                           <div className="flex justify-between text-[10px] mb-1">
                             <span className="text-muted-foreground">Trading Days</span>
-                            <span className="font-bold text-muted-foreground">
-                              {progress.tradingDays} / {account.minTradingDays} min
+                            <span className="font-bold text-muted-foreground tabular-nums">
+                              {p.tradingDays} / {account.minTradingDays} min
                             </span>
                           </div>
                           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                             <div className="h-full rounded-full bg-emerald-500 transition-all"
-                              style={{ width: `${progress.daysPct}%` }} />
+                              style={{ width: `${p.daysPct}%` }} />
                           </div>
                         </div>
                       )}
@@ -335,7 +348,7 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
 
                     {/* Footer */}
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border">
-                      <span>{progress.tradeCount} trades linked</span>
+                      <span>{p.tradeCount} trades linked</span>
                       <span>Started {new Date(account.startDate ?? account.createdAt!).toLocaleDateString()}</span>
                     </div>
                   </div>

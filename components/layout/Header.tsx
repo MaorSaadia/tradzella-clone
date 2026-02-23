@@ -4,25 +4,20 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { RefreshCw, LogOut } from 'lucide-react'
+import { toast } from 'sonner'
+import { RefreshCw, Loader2, LogOut, User } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
-import { ThemeToggle } from './ThemeToggle'
-import { toast } from 'sonner'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ThemeToggle } from './ThemeToggle'
+import { AccountSwitcher } from './AccountSwitcher'
 
 interface HeaderProps {
-  user: {
-    name?: string | null
-    email?: string | null
-  }
+  user: { name?: string | null; email?: string | null }
 }
 
 export function Header({ user }: HeaderProps) {
@@ -38,71 +33,67 @@ export function Header({ user }: HeaderProps) {
     try {
       const res = await fetch('/api/tradovate/sync', { method: 'POST' })
       const data = await res.json()
-
-      if (!res.ok) {
-        toast.error(data.error ?? 'Sync failed')
-        return
-      }
-
-      toast.success(data.message)
-      router.refresh() // re-fetch server components with new data
-    } catch {
-      toast.error('Network error — could not sync')
-    } finally {
-      setSyncing(false)
-    }
+      if (res.ok) toast.success(data.message ?? 'Sync complete')
+      else toast.error(data.error ?? 'Sync failed')
+    } catch { toast.error('Network error') }
+    finally { setSyncing(false); router.refresh() }
   }
 
   return (
-    <header className="h-16 border-b border-border bg-card px-6 flex items-center justify-between shrink-0">
+    <header className="h-16 border-b border-border bg-card flex items-center gap-3 px-6 shrink-0">
 
-      {/* Left — page context (empty, pages set their own title) */}
-      <div />
+      {/* Account switcher — left side after logo */}
+      <AccountSwitcher />
 
-      {/* Right — actions */}
-      <div className="flex items-center gap-2">
+      {/* Spacer */}
+      <div className="flex-1" />
 
-        {/* Sync button */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSync}
-          disabled={syncing}
-          className="gap-2 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? 'Syncing...' : 'Sync Now'}
-        </Button>
+      {/* Right side actions */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleSync}
+        disabled={syncing}
+        className="gap-2 h-9 text-xs font-semibold"
+      >
+        {syncing
+          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          : <RefreshCw className="w-3.5 h-3.5" />
+        }
+        Sync Now
+      </Button>
 
-        <ThemeToggle />
+      <ThemeToggle />
 
-        {/* User menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-emerald-500/20 text-emerald-500 text-xs font-bold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <div className="px-2 py-1.5">
-              <p className="text-sm font-semibold">{user.name ?? 'Trader'}</p>
-              <p className="text-xs text-muted-foreground">{user.email}</p>
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-red-500 focus:text-red-500 cursor-pointer"
-              onClick={() => signOut({ callbackUrl: '/login' })}
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {/* User menu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-emerald-500/20 text-emerald-500 text-xs font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <div className="px-3 py-2">
+            <p className="text-sm font-semibold truncate">{user.name ?? 'Trader'}</p>
+            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="gap-2" onClick={() => router.push('/settings')}>
+            <User className="w-3.5 h-3.5" /> Settings
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="gap-2 text-red-500 focus:text-red-500"
+            onClick={() => signOut({ callbackUrl: '/login' })}
+          >
+            <LogOut className="w-3.5 h-3.5" /> Sign Out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   )
 }
