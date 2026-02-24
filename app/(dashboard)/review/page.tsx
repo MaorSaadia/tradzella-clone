@@ -1,9 +1,10 @@
-// app/(dashboard)/review/page.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// app/(dashboard)/review/page.tsx — UPDATED with saved reviews
 
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { trades } from '@/lib/db/schema'
+import { trades, weeklyReviews } from '@/lib/db/schema'
 import { eq, desc } from 'drizzle-orm'
 import { WeeklyReviewClient } from '@/components/review/WeeklyReviewClient'
 
@@ -11,11 +12,29 @@ export default async function ReviewPage() {
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
 
-  // Get the earliest and latest trade dates so we know what weeks are available
-  const allTrades = await db.query.trades.findMany({
-    where: eq(trades.userId, session.user.id),
-    orderBy: [desc(trades.exitTime)],
-  })
+  const [allTrades, savedReviews] = await Promise.all([
+    db.query.trades.findMany({
+      where: eq(trades.userId, session.user.id),
+      orderBy: [desc(trades.exitTime)],
+    }),
+    db
+      .select({
+        id:              weeklyReviews.id,
+        weekLabel:       weeklyReviews.weekLabel,
+        weekStart:       weeklyReviews.weekStart,
+        weekEnd:         weeklyReviews.weekEnd,
+        overallScore:    weeklyReviews.overallScore,
+        disciplineScore: weeklyReviews.disciplineScore,
+        headline:        weeklyReviews.headline,
+        tradeCount:      weeklyReviews.tradeCount,
+        netPnl:          weeklyReviews.netPnl,
+        createdAt:       weeklyReviews.createdAt,
+        reviewData:      weeklyReviews.reviewData,
+      })
+      .from(weeklyReviews)
+      .where(eq(weeklyReviews.userId, session.user.id))
+      .orderBy(desc(weeklyReviews.weekStart)),
+  ])
 
   const tradeCount = allTrades.length
   const earliestDate = allTrades.length
@@ -23,10 +42,11 @@ export default async function ReviewPage() {
     : new Date()
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <WeeklyReviewClient
         tradeCount={tradeCount}
         earliestDate={earliestDate.toISOString()}
+        initialSavedReviews={savedReviews as any}
       />
     </div>
   )

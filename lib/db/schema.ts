@@ -36,6 +36,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   propFirmAccounts: many(propFirmAccounts),
   playbooks: many(playbooks),
   tradeMistakes: many(tradeMistakes),
+  weeklyReviews: many(weeklyReviews),
 }))
 
 // ── Tradovate Accounts ─────────────────────────────────────
@@ -181,6 +182,27 @@ export const tradesRelations = relations(trades, ({ one, many }) => ({
   mistakes: many(tradeMistakes),
 }))
 
+// ── WeeklyReviews ─────────────────────────────────────────────────
+export const weeklyReviews = pgTable('weekly_reviews', {
+  id:              uuid('id').defaultRandom().primaryKey(),
+  userId:          uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  weekStart:       timestamp('week_start').notNull(),
+  weekEnd:         timestamp('week_end').notNull(),
+  weekLabel:       text('week_label').notNull(),
+  overallScore:    integer('overall_score').notNull(),
+  disciplineScore: integer('discipline_score').notNull(),
+  headline:        text('headline').notNull(),
+  reviewData:      json('review_data').notNull(),
+  tradeCount:      integer('trade_count').default(0),
+  netPnl:          numeric('net_pnl', { precision: 12, scale: 2 }),
+  createdAt:       timestamp('created_at').defaultNow(),
+  updatedAt:       timestamp('updated_at').defaultNow(),
+})
+
+export const weeklyReviewsRelations = relations(weeklyReviews, ({ one }) => ({
+  user: one(users, { fields: [weeklyReviews.userId], references: [users.id] }),
+}))
+
 // ── Types ──────────────────────────────────────────────────
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -195,3 +217,5 @@ export type TradeMistake = typeof tradeMistakes.$inferSelect
 export type NewTradeMistake = typeof tradeMistakes.$inferInsert
 export type Trade = typeof trades.$inferSelect
 export type NewTrade = typeof trades.$inferInsert
+export type WeeklyReview    = typeof weeklyReviews.$inferSelect
+export type NewWeeklyReview = typeof weeklyReviews.$inferInsert
