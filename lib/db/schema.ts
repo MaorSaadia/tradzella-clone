@@ -186,6 +186,7 @@ export const tradesRelations = relations(trades, ({ one, many }) => ({
 export const weeklyReviews = pgTable('weekly_reviews', {
   id:              uuid('id').defaultRandom().primaryKey(),
   userId:          uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    propFirmAccountId: uuid('prop_firm_account_id'),        
   weekStart:       timestamp('week_start').notNull(),
   weekEnd:         timestamp('week_end').notNull(),
   weekLabel:       text('week_label').notNull(),

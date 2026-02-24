@@ -16,16 +16,18 @@ export async function GET() {
 
   const reviews = await db
     .select({
-      id:              weeklyReviews.id,
-      weekLabel:       weeklyReviews.weekLabel,
-      weekStart:       weeklyReviews.weekStart,
-      weekEnd:         weeklyReviews.weekEnd,
-      overallScore:    weeklyReviews.overallScore,
-      disciplineScore: weeklyReviews.disciplineScore,
-      headline:        weeklyReviews.headline,
-      tradeCount:      weeklyReviews.tradeCount,
-      netPnl:          weeklyReviews.netPnl,
-      createdAt:       weeklyReviews.createdAt,
+      id:                weeklyReviews.id,
+      weekLabel:         weeklyReviews.weekLabel,
+      weekStart:         weeklyReviews.weekStart,
+      weekEnd:           weeklyReviews.weekEnd,
+      overallScore:      weeklyReviews.overallScore,
+      disciplineScore:   weeklyReviews.disciplineScore,
+      headline:          weeklyReviews.headline,
+      tradeCount:        weeklyReviews.tradeCount,
+      netPnl:            weeklyReviews.netPnl,
+      createdAt:         weeklyReviews.createdAt,
+      propFirmAccountId: weeklyReviews.propFirmAccountId,
+      reviewData:        weeklyReviews.reviewData,
     })
     .from(weeklyReviews)
     .where(eq(weeklyReviews.userId, session.user.id))
@@ -45,6 +47,7 @@ export async function POST(req: NextRequest) {
       weekStart, weekEnd, weekLabel,
       overallScore, disciplineScore, headline,
       reviewData, tradeCount, netPnl,
+      propFirmAccountId,
     } = body
 
     if (!weekStart || !weekEnd || !reviewData) {
@@ -54,17 +57,19 @@ export async function POST(req: NextRequest) {
     const start = new Date(weekStart)
     const end   = new Date(weekEnd)
 
-    // Check if a review for this exact week already exists
+    // Check if a review for this exact week + account already exists
+    const existingConditions = [
+      eq(weeklyReviews.userId, session.user.id),
+      gte(weeklyReviews.weekStart, start),
+      lte(weeklyReviews.weekEnd, end),
+    ] as any[]
+    if (propFirmAccountId) {
+      existingConditions.push(eq(weeklyReviews.propFirmAccountId, propFirmAccountId))
+    }
     const existing = await db
       .select({ id: weeklyReviews.id })
       .from(weeklyReviews)
-      .where(
-        and(
-          eq(weeklyReviews.userId, session.user.id),
-          gte(weeklyReviews.weekStart, start),
-          lte(weeklyReviews.weekEnd, end),
-        )
-      )
+      .where(and(...existingConditions))
       .limit(1)
 
     let saved
@@ -96,6 +101,7 @@ export async function POST(req: NextRequest) {
           reviewData,
           tradeCount,
           netPnl: netPnl?.toString(),
+          propFirmAccountId: propFirmAccountId ?? null,
         })
         .returning()
       saved = inserted

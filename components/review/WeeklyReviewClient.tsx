@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client'
 
 // components/review/WeeklyReviewClient.tsx — v2 with persistence
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
   Sparkles, Calendar, ChevronLeft, ChevronRight,
@@ -16,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useAccount } from '@/components/layout/AccountContext'
 
 interface ReviewData {
   weekLabel: string
@@ -41,6 +43,7 @@ interface SavedReview {
   netPnl: string | null
   createdAt: string | Date
   reviewData: ReviewData
+  propFirmAccountId: string | null
 }
 
 function getMondayOfWeek(date: Date): Date {
@@ -132,34 +135,68 @@ function ReviewSkeleton() {
   )
 }
 
-function HistoryItem({ r, active, onClick, onDelete }: {
-  r: SavedReview; active: boolean; onClick: () => void; onDelete: () => void
+function HistoryItem({ r, active, onClick, onDelete, onReassign, accounts, showAssignHint }: {
+  r: SavedReview
+  active: boolean
+  onClick: () => void
+  onDelete: () => void
+  onReassign?: (accountId: string | null) => void
+  accounts?: import('@/components/layout/AccountContext').AccountOption[]
+  showAssignHint?: boolean
 }) {
   return (
     <div onClick={onClick} className={cn(
-      'group relative rounded-xl border p-3 cursor-pointer transition-all',
+      'group rounded-xl border p-3 cursor-pointer transition-all',
       active ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-border hover:border-border/80 hover:bg-accent/40'
     )}>
+      {/* Score bar row — no absolute positioning conflict */}
       <div className="flex items-center gap-2 mb-2">
         <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
           <div className={cn('h-full rounded-full', scoreBg(r.overallScore))} style={{ width: `${r.overallScore}%` }} />
         </div>
-        <span className={cn('text-[10px] font-black tabular-nums', scoreColor(r.overallScore))}>{r.overallScore}</span>
+        <span className={cn('text-[10px] font-black tabular-nums w-6 text-right', scoreColor(r.overallScore))}>
+          {r.overallScore}
+        </span>
       </div>
-      <p className="text-[11px] font-bold leading-tight mb-0.5 pr-4">{r.weekLabel}</p>
+
+      <p className="text-[11px] font-bold leading-tight mb-0.5">{r.weekLabel}</p>
       <p className="text-[10px] text-muted-foreground line-clamp-2 leading-tight">{r.headline}</p>
+
+      {/* Bottom row: badges + delete button inline — no overlap */}
       <div className="flex items-center gap-2 mt-2">
-        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">{r.tradeCount ?? 0} trades</Badge>
-        {r.netPnl && (
+        {r.tradeCount != null && r.tradeCount > 0 && (
+          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">{r.tradeCount} trades</Badge>
+        )}
+        {r.netPnl && Number(r.netPnl) !== 0 && (
           <span className={cn('text-[10px] font-bold tabular-nums', Number(r.netPnl) >= 0 ? 'text-emerald-500' : 'text-red-500')}>
             {Number(r.netPnl) >= 0 ? '+' : ''}${Math.abs(Number(r.netPnl)).toFixed(0)}
           </span>
         )}
+        <button
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          className="ml-auto opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-all p-1 rounded"
+          title="Delete review"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
       </div>
-      <button onClick={e => { e.stopPropagation(); onDelete() }}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-all p-1 rounded">
-        <Trash2 className="w-3 h-3" />
-      </button>
+
+      {/* Show assign hint for old unassigned reviews */}
+      {showAssignHint && onReassign && accounts && accounts.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-border/50" onClick={e => e.stopPropagation()}>
+          <p className="text-[9px] text-amber-500 mb-1">⚠ Not assigned to an account</p>
+          <select
+            className="w-full text-[10px] bg-muted rounded px-1.5 py-1 border border-border cursor-pointer"
+            defaultValue=""
+            onChange={e => { if (e.target.value) onReassign(e.target.value) }}
+          >
+            <option value="" disabled>Assign to account…</option>
+            {accounts.filter(a => a.id !== 'all').map(a => (
+              <option key={a.id} value={a.id}>{a.label || a.firmName}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   )
 }
@@ -321,7 +358,13 @@ export function WeeklyReviewClient({
   tradeCount: number
   earliestDate: string
   initialSavedReviews?: SavedReview[]
+  propFirmAccountId?: string | null
 }) {
+  // Read the currently-selected prop firm account from global context
+  // This is reactive — re-renders immediately when user switches account
+  const { selected, accounts } = useAccount()
+  const propFirmAccountId = selected?.id ?? null
+
   const [selectedMonday, setSelectedMonday] = useState(() => getMondayOfWeek(new Date()))
   const [liveReview, setLiveReview]         = useState<ReviewData | null>(null)
   const [streaming, setStreaming]           = useState(false)
@@ -330,15 +373,40 @@ export function WeeklyReviewClient({
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
+  // When user switches account: immediately clear the displayed review
+  // so they NEVER see another account's review body
+  const prevAccountRef = useRef<string | null>(undefined as any)
+  useEffect(() => {
+    // Skip the very first mount (prevAccountRef not yet set)
+    if (prevAccountRef.current === undefined) {
+      prevAccountRef.current = propFirmAccountId
+      return
+    }
+    if (prevAccountRef.current !== propFirmAccountId) {
+      prevAccountRef.current = propFirmAccountId
+      setLiveReview(null)
+      setDone(false)
+      setActiveHistoryId(null)
+      abortRef.current?.abort()
+    }
+  }, [propFirmAccountId])
+
   const sunday    = getSundayOfWeek(selectedMonday)
   const weekLabel = formatWeekLabel(selectedMonday)
 
+  // Filter sidebar to only reviews for the currently-selected account
+  // selected=null or selected.id='all' means "All Accounts" → show all reviews
+  // specific account → only show reviews saved under that exact account UUID
+  const filteredReviews = (propFirmAccountId && propFirmAccountId !== 'all')
+    ? savedReviews.filter(r => r.propFirmAccountId === propFirmAccountId)
+    : savedReviews
+
   const displayReview: ReviewData | null = activeHistoryId
-    ? (savedReviews.find(r => r.id === activeHistoryId)?.reviewData ?? null)
+    ? (filteredReviews.find(r => r.id === activeHistoryId)?.reviewData ?? null)
     : liveReview
 
   const isViewingHistory = !!activeHistoryId
-  const isCurrentWeekSaved = savedReviews.some(r =>
+  const isCurrentWeekSaved = filteredReviews.some(r =>
     new Date(r.weekStart).getTime() === selectedMonday.getTime()
   )
 
@@ -349,7 +417,13 @@ export function WeeklyReviewClient({
     setActiveHistoryId(null)
   }
 
-  async function saveReview(reviewData: ReviewData, weekStart: Date, weekEnd: Date) {
+  async function saveReview(
+    reviewData: ReviewData,
+    weekStart: Date,
+    weekEnd: Date,
+    weekTradeCount: number,
+    weekNetPnl: number,
+  ) {
     try {
       const res = await fetch('/api/review/saved', {
         method: 'POST',
@@ -362,8 +436,9 @@ export function WeeklyReviewClient({
           disciplineScore: reviewData.psychologicalAnalysis?.disciplineScore ?? 0,
           headline: reviewData.headline,
           reviewData,
-          tradeCount: null,
-          netPnl: null,
+          tradeCount: weekTradeCount,
+          netPnl: weekNetPnl.toString(),
+          propFirmAccountId: propFirmAccountId ?? null,
         }),
       })
       if (!res.ok) return
@@ -381,11 +456,34 @@ export function WeeklyReviewClient({
   async function deleteReview(id: string) {
     if (!confirm('Delete this review permanently?')) return
     try {
-      await fetch(`/api/review/saved/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/review/saved/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error ?? `Delete failed (${res.status})`)
+        return
+      }
+      // Only update state AFTER confirmed DB delete
       setSavedReviews(prev => prev.filter(r => r.id !== id))
       if (activeHistoryId === id) setActiveHistoryId(null)
       toast.success('Review deleted')
-    } catch { toast.error('Delete failed') }
+    } catch (e: any) {
+      toast.error('Delete failed: ' + e.message)
+    }
+  }
+
+  async function reassignReview(id: string, newAccountId: string | null) {
+    try {
+      const res = await fetch(`/api/review/saved/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propFirmAccountId: newAccountId }),
+      })
+      if (!res.ok) { toast.error('Failed to reassign'); return }
+      setSavedReviews(prev => prev.map(r =>
+        r.id === id ? { ...r, propFirmAccountId: newAccountId } : r
+      ))
+      toast.success('Review assigned to account')
+    } catch { toast.error('Reassign failed') }
   }
 
   const generate = useCallback(async () => {
@@ -421,8 +519,23 @@ export function WeeklyReviewClient({
       setLiveReview(parsed)
       setDone(true)
 
-      // Auto-save silently
-      await saveReview(parsed, selectedMonday, sunday)
+      // Fetch real trade count + net PnL for this week to store with the review
+      let weekTradeCount = 0
+      let weekNetPnl = 0
+      try {
+        const statsRes = await fetch(
+          `/api/review/week-stats?weekStart=${selectedMonday.toISOString()}&weekEnd=${sunday.toISOString()}` +
+          (propFirmAccountId ? `&propFirmAccountId=${propFirmAccountId}` : ''),
+        )
+        if (statsRes.ok) {
+          const stats = await statsRes.json()
+          weekTradeCount = stats.tradeCount ?? 0
+          weekNetPnl     = stats.netPnl ?? 0
+        }
+      } catch {}
+
+      // Auto-save silently with real counts
+      await saveReview(parsed, selectedMonday, sunday, weekTradeCount, weekNetPnl)
       toast.success('Review generated & saved to history!')
     } catch (err: any) {
       if (err.name !== 'AbortError') toast.error('Generation failed: ' + err.message)
@@ -468,17 +581,17 @@ export function WeeklyReviewClient({
     <div className="flex gap-5 items-start">
 
       {/* ── History sidebar ── */}
-      {savedReviews.length > 0 && (
+      {filteredReviews.length > 0 && (
         <div className="w-60 shrink-0 space-y-2">
           <div className="flex items-center gap-2 px-1 mb-3">
             <BookOpen className="w-4 h-4 text-emerald-500" />
             <span className="text-xs font-black uppercase tracking-wider">Saved Reviews</span>
             <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-500 text-black font-bold ml-auto">
-              {savedReviews.length}
+              {filteredReviews.length}
             </Badge>
           </div>
           <div className="space-y-2 max-h-[calc(100vh-180px)] overflow-y-auto">
-            {savedReviews.map(r => (
+            {filteredReviews.map(r => (
               <HistoryItem
                 key={r.id} r={r}
                 active={activeHistoryId === r.id}
@@ -487,8 +600,37 @@ export function WeeklyReviewClient({
                   setLiveReview(null)
                 }}
                 onDelete={() => deleteReview(r.id)}
+                onReassign={(newId) => reassignReview(r.id, newId)}
+                accounts={accounts}
               />
             ))}
+
+            {/* Unassigned reviews — orphaned from old saves before propFirmAccountId existed */}
+            {propFirmAccountId && propFirmAccountId !== 'all' && (() => {
+              const unassigned = savedReviews.filter(r => !r.propFirmAccountId)
+              if (unassigned.length === 0) return null
+              return (
+                <div className="mt-3">
+                  <p className="text-[9px] uppercase tracking-widest text-muted-foreground/50 px-1 mb-1.5">
+                    Unassigned
+                  </p>
+                  {unassigned.map(r => (
+                    <HistoryItem
+                      key={r.id} r={r}
+                      active={activeHistoryId === r.id}
+                      onClick={() => {
+                        setActiveHistoryId(prev => prev === r.id ? null : r.id)
+                        setLiveReview(null)
+                      }}
+                      onDelete={() => deleteReview(r.id)}
+                      onReassign={(newId) => reassignReview(r.id, newId)}
+                      accounts={accounts}
+                      showAssignHint
+                    />
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
@@ -537,7 +679,7 @@ export function WeeklyReviewClient({
                   </div>
                   <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
                     onClick={() => goToWeek(new Date(selectedMonday.getTime() + 7 * 86400000))}
-                    disabled={streaming || getSundayOfWeek(new Date(selectedMonday.getTime() + 7 * 86400000)) > new Date()}>
+                    disabled={streaming || new Date(selectedMonday.getTime() + 7 * 86400000) > new Date()}>
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
@@ -607,7 +749,7 @@ export function WeeklyReviewClient({
           <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border rounded-2xl text-center">
             <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mb-4 text-3xl">🤖</div>
             <h2 className="text-base font-black mb-2">
-              {savedReviews.length > 0 ? 'Generate a new review or pick one from the sidebar' : 'Generate your first review'}
+              {filteredReviews.length > 0 ? 'Generate a new review or pick one from the sidebar' : 'Generate your first review'}
             </h2>
             <p className="text-sm text-muted-foreground max-w-sm mb-1">
               Pick a week, hit Generate — Gemini analyzes every trade and coaches you on what to fix.
