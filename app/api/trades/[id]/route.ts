@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// app/api/trades/[id]/route.ts  (add PATCH handler — merge with existing if you have one)
+// app/api/trades/[id]/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
@@ -7,10 +7,11 @@ import { db } from '@/lib/db'
 import { trades } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
+    const { id } = await params
     const body = await req.json()
     const {
       notes, tags, grade, emotion,
@@ -29,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         ...(propFirmAccountId !== undefined && { propFirmAccountId: propFirmAccountId || null }),
         updatedAt: new Date(),
       })
-      .where(and(eq(trades.id, params.id), eq(trades.userId, session.user.id)))
+      .where(and(eq(trades.id, id), eq(trades.userId, session.user.id)))
       .returning()
 
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })

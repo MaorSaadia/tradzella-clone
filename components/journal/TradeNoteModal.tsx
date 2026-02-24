@@ -92,7 +92,7 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
 
       const updated = await res.json()
       toast.success('Trade note saved!')
-      onSaved(updated.trade)
+      onSaved(updated)
     } catch {
       toast.error('Network error')
     } finally {
