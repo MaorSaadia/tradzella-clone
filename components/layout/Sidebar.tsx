@@ -1,12 +1,13 @@
 'use client'
 
-// components/layout/Sidebar.tsx — Updated with Playbook + Compare links
+// components/layout/Sidebar.tsx — Updated with Review link
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, BookOpen, BarChart3, Building2,
   Upload, Settings, LogOut, GitCompare, ChevronRight,
+  Sparkles, FileText,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -25,8 +26,9 @@ const NAV = [
   {
     section: 'STRATEGY',
     items: [
-      { href: '/playbook',   icon: BookOpen,    label: 'Playbook',  badge: 'NEW' },
-      { href: '/compare',    icon: GitCompare,  label: 'Compare',   badge: 'NEW' },
+      { href: '/playbook',   icon: FileText,    label: 'Playbook',       badge: 'NEW' },
+      { href: '/review',     icon: Sparkles,    label: 'Weekly Review',  badge: 'AI' },
+      { href: '/compare',    icon: GitCompare,  label: 'Compare',        badge: 'NEW' },
       { href: '/propfirms',  icon: Building2,   label: 'Prop Firms' },
     ],
   },
@@ -57,6 +59,7 @@ export function Sidebar({ user }: SidebarProps) {
 
   return (
     <aside className="w-56 h-screen bg-card border-r border-border flex flex-col shrink-0">
+      {/* Logo */}
       <div className="h-16 flex items-center px-5 border-b border-border gap-2.5 shrink-0">
         <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0">
           <span className="text-black font-black text-sm">T</span>
@@ -69,6 +72,7 @@ export function Sidebar({ user }: SidebarProps) {
         </Badge>
       </div>
 
+      {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-3">
         {NAV.map(section => (
           <div key={section.section} className="mb-5">
@@ -78,16 +82,29 @@ export function Sidebar({ user }: SidebarProps) {
             {section.items.map(item => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               const Icon = item.icon
+              const isAI = item.badge === 'AI'
               return (
-                <Link key={item.href} href={item.href}
+                <Link
+                  key={item.href}
+                  href={item.href}
                   className={cn(
                     'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all group mb-0.5',
-                    isActive ? 'bg-emerald-500/10 text-emerald-500' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                  )}>
-                  <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-emerald-500' : '')} />
+                    isActive
+                      ? 'bg-emerald-500/10 text-emerald-500'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  )}
+                >
+                  <Icon className={cn('w-4 h-4 shrink-0', isActive && 'text-emerald-500')} />
                   <span className="flex-1">{item.label}</span>
                   {item.badge && (
-                    <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-500 text-black font-bold">{item.badge}</Badge>
+                    <Badge className={cn(
+                      'text-[9px] px-1.5 py-0 h-4 font-bold',
+                      isAI
+                        ? 'bg-violet-500 text-white'
+                        : 'bg-emerald-500 text-black'
+                    )}>
+                      {item.badge}
+                    </Badge>
                   )}
                   {isActive && <ChevronRight className="w-3 h-3 text-emerald-500" />}
                 </Link>
@@ -97,11 +114,16 @@ export function Sidebar({ user }: SidebarProps) {
         ))}
       </nav>
 
+      {/* User */}
       <div className="p-3 border-t border-border">
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-accent transition-colors cursor-pointer group"
-          onClick={() => signOut({ callbackUrl: '/login' })}>
+        <div
+          className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-accent transition-colors cursor-pointer group"
+          onClick={() => signOut({ callbackUrl: '/login' })}
+        >
           <Avatar className="h-7 w-7 shrink-0">
-            <AvatarFallback className="bg-emerald-500/20 text-emerald-500 text-xs font-bold">{initials}</AvatarFallback>
+            <AvatarFallback className="bg-emerald-500/20 text-emerald-500 text-xs font-bold">
+              {initials}
+            </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold truncate">{user.name ?? 'Trader'}</p>
