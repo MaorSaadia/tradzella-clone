@@ -15,7 +15,7 @@ export function StatsCards({ trades }: StatsCardsProps) {
 
   const cards = [
     {
-      label: 'Net P&L',
+      label: 'Total P/L',
       value: formatCurrency(stats.netPnl),
       sub: `${stats.totalTrades} total trades`,
       icon: stats.netPnl >= 0 ? TrendingUp : TrendingDown,

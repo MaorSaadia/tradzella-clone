@@ -5,13 +5,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { trades, tradeMistakes, playbooks } from '@/lib/db/schema'
+import { getTradeTotalPnl } from '@/lib/utils'
 import { eq, and, gte, lte, desc } from 'drizzle-orm'
 
 // ── Build the structured trade payload for Gemini ─────────
 function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any[]) {
-  const pnls = weekTrades.map(t => Number(t.pnl))
-  const wins = weekTrades.filter(t => Number(t.pnl) > 0)
-  const losses = weekTrades.filter(t => Number(t.pnl) < 0)
+  const pnls = weekTrades.map(t => getTradeTotalPnl(t))
+  const wins = weekTrades.filter(t => getTradeTotalPnl(t) > 0)
+  const losses = weekTrades.filter(t => getTradeTotalPnl(t) < 0)
   const netPnl = pnls.reduce((s, p) => s + p, 0)
   const winRate = weekTrades.length ? (wins.length / weekTrades.length) * 100 : 0
 
@@ -20,9 +21,9 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
   weekTrades.forEach(t => {
     const day = new Date(t.exitTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
     if (!dailyMap[day]) dailyMap[day] = { pnl: 0, trades: 0, wins: 0 }
-    dailyMap[day].pnl += Number(t.pnl)
+    dailyMap[day].pnl += getTradeTotalPnl(t)
     dailyMap[day].trades++
-    if (Number(t.pnl) > 0) dailyMap[day].wins++
+    if (getTradeTotalPnl(t) > 0) dailyMap[day].wins++
   })
 
   // Hourly breakdown
@@ -31,7 +32,7 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
     const hour = new Date(t.entryTime).getHours()
     const label = `${hour}:00`
     if (!hourlyMap[label]) hourlyMap[label] = { pnl: 0, trades: 0 }
-    hourlyMap[label].pnl += Number(t.pnl)
+    hourlyMap[label].pnl += getTradeTotalPnl(t)
     hourlyMap[label].trades++
   })
 
@@ -39,9 +40,9 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
   const symbolMap: Record<string, { pnl: number; trades: number; wins: number }> = {}
   weekTrades.forEach(t => {
     if (!symbolMap[t.symbol]) symbolMap[t.symbol] = { pnl: 0, trades: 0, wins: 0 }
-    symbolMap[t.symbol].pnl += Number(t.pnl)
+    symbolMap[t.symbol].pnl += getTradeTotalPnl(t)
     symbolMap[t.symbol].trades++
-    if (Number(t.pnl) > 0) symbolMap[t.symbol].wins++
+    if (getTradeTotalPnl(t) > 0) symbolMap[t.symbol].wins++
   })
 
   // Revenge trading detection: 3+ consecutive losses
@@ -49,7 +50,7 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
   const streaks: string[] = []
   let lossStreak = 0
   sorted.forEach((t, i) => {
-    if (Number(t.pnl) < 0) {
+    if (getTradeTotalPnl(t) < 0) {
       lossStreak++
       if (lossStreak >= 3) {
         streaks.push(`${lossStreak} consecutive losses detected ending at trade ${i + 1} (${t.symbol}, ${new Date(t.exitTime).toLocaleTimeString()})`)
@@ -69,9 +70,9 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
       const pb = allPlaybooks.find((p: any) => p.id === t.playbookId)
       if (pb) {
         if (!playbookPerf[t.playbookId]) playbookPerf[t.playbookId] = { pnl: 0, trades: 0, wins: 0, name: pb.name }
-        playbookPerf[t.playbookId].pnl += Number(t.pnl)
+        playbookPerf[t.playbookId].pnl += getTradeTotalPnl(t)
         playbookPerf[t.playbookId].trades++
-        if (Number(t.pnl) > 0) playbookPerf[t.playbookId].wins++
+        if (getTradeTotalPnl(t) > 0) playbookPerf[t.playbookId].wins++
       }
     }
   })
@@ -82,7 +83,7 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
     const trade = weekTrades.find(t => t.id === m.tradeId)
     if (!mistakeCounts[m.mistakeType]) mistakeCounts[m.mistakeType] = { count: 0, pnl: 0 }
     mistakeCounts[m.mistakeType].count++
-    mistakeCounts[m.mistakeType].pnl += trade ? Number(trade.pnl) : 0
+    mistakeCounts[m.mistakeType].pnl += trade ? getTradeTotalPnl(trade) : 0
   })
 
   // Grade distribution
@@ -94,12 +95,12 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
   weekTrades.forEach(t => { if (t.emotion) emotions[t.emotion] = (emotions[t.emotion] ?? 0) + 1 })
 
   // Best and worst trades
-  const bestTrade = sorted.reduce((best, t) => Number(t.pnl) > Number(best.pnl) ? t : best, sorted[0])
-  const worstTrade = sorted.reduce((worst, t) => Number(t.pnl) < Number(worst.pnl) ? t : worst, sorted[0])
+  const bestTrade = sorted.reduce((best, t) => getTradeTotalPnl(t) > getTradeTotalPnl(best) ? t : best, sorted[0])
+  const worstTrade = sorted.reduce((worst, t) => getTradeTotalPnl(t) < getTradeTotalPnl(worst) ? t : worst, sorted[0])
 
   // Size of wins vs losses
-  const avgWin = wins.length ? wins.reduce((s, t) => s + Number(t.pnl), 0) / wins.length : 0
-  const avgLoss = losses.length ? Math.abs(losses.reduce((s, t) => s + Number(t.pnl), 0) / losses.length) : 0
+  const avgWin = wins.length ? wins.reduce((s, t) => s + getTradeTotalPnl(t), 0) / wins.length : 0
+  const avgLoss = losses.length ? Math.abs(losses.reduce((s, t) => s + getTradeTotalPnl(t), 0) / losses.length) : 0
 
   return {
     summary: {
@@ -111,8 +112,8 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
       avgWin: avgWin.toFixed(2),
       avgLoss: avgLoss.toFixed(2),
       rrRatio: avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : 'N/A',
-      bestTrade: bestTrade ? { symbol: bestTrade.symbol, pnl: Number(bestTrade.pnl).toFixed(2), time: bestTrade.exitTime } : null,
-      worstTrade: worstTrade ? { symbol: worstTrade.symbol, pnl: Number(worstTrade.pnl).toFixed(2), time: worstTrade.exitTime } : null,
+      bestTrade: bestTrade ? { symbol: bestTrade.symbol, pnl: getTradeTotalPnl(bestTrade).toFixed(2), time: bestTrade.exitTime } : null,
+      worstTrade: worstTrade ? { symbol: worstTrade.symbol, pnl: getTradeTotalPnl(worstTrade).toFixed(2), time: worstTrade.exitTime } : null,
       grades,
       emotions,
     },
@@ -140,7 +141,7 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
     tradeList: sorted.map(t => ({
       symbol: t.symbol,
       side: t.side,
-      pnl: Number(t.pnl).toFixed(2),
+      pnl: getTradeTotalPnl(t).toFixed(2),
       entryTime: new Date(t.entryTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
       exitTime: new Date(t.exitTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
       day: new Date(t.exitTime).toLocaleDateString('en-US', { weekday: 'short' }),

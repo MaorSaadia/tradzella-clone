@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-expressions */
 // app/api/trades/import/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { trades } from '@/lib/db/schema'
+import { and, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 
 const tradeSchema = z.object({
@@ -15,6 +15,7 @@ const tradeSchema = z.object({
   exitPrice: z.string(),
   qty: z.number(),
   pnl: z.string(),
+  commission: z.string().optional(),
   entryTime: z.string(),
   exitTime: z.string(),
   tradovateTradeId: z.string(),
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { trades: incoming } = importSchema.parse(body)
 
-    let imported = 0, skipped = 0
+    let imported = 0, skipped = 0, linked = 0
 
     for (const trade of incoming) {
       try {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
           exitPrice: trade.exitPrice,
           qty: trade.qty,
           pnl: trade.pnl,
-          commission: '0',
+          commission: trade.commission ?? '0',
           entryTime: new Date(trade.entryTime),
           exitTime: new Date(trade.exitTime),
           propFirmAccountId: trade.propFirmAccountId ?? null,
@@ -54,11 +55,32 @@ export async function POST(req: NextRequest) {
           notes: '',
         }).onConflictDoNothing()
 
-        result.rowCount && result.rowCount > 0 ? imported++ : skipped++
+        if (result.rowCount && result.rowCount > 0) {
+          imported++
+          continue
+        }
+
+        // Already exists: if client sent a prop account, link existing unlinked trade.
+        if (trade.propFirmAccountId) {
+          const linkResult = await db
+            .update(trades)
+            .set({ propFirmAccountId: trade.propFirmAccountId, updatedAt: new Date() })
+            .where(and(
+              eq(trades.userId, session.user.id),
+              eq(trades.tradovateTradeId, trade.tradovateTradeId),
+              isNull(trades.propFirmAccountId),
+            ))
+          if (linkResult.rowCount && linkResult.rowCount > 0) {
+            linked++
+            continue
+          }
+        }
+
+        skipped++
       } catch { skipped++ }
     }
 
-    return NextResponse.json({ success: true, imported, skipped, total: incoming.length })
+    return NextResponse.json({ success: true, imported, linked, skipped, total: incoming.length })
   } catch (error: any) {
     if (error.name === 'ZodError') return NextResponse.json({ error: error.errors[0].message }, { status: 400 })
     return NextResponse.json({ error: 'Import failed' }, { status: 500 })

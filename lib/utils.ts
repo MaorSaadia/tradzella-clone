@@ -25,6 +25,15 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`
 }
 
+export function getTradeTotalPnl(trade: Trade): number {
+  // CSV imports store gross pnl with commission separate.
+  // Synced trades may already be net in pnl.
+  const isCsvImport = !!trade.tradovateTradeId?.startsWith('csv-')
+  return isCsvImport
+    ? Number(trade.pnl) - Number(trade.commission ?? 0)
+    : Number(trade.pnl)
+}
+
 // ── Date formatters ────────────────────────────────────────
 export function formatDate(date: Date | string): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -83,7 +92,7 @@ export function calcTrailingDrawdown(trades: Trade[]): {
   let maxTrailingDD = 0     // largest gap between peak and current balance
 
   sorted.forEach(trade => {
-    const pnl = Number(trade.pnl)
+    const pnl = getTradeTotalPnl(trade)
 
     // After this trade closes, update running balance
     runningBalance += pnl
@@ -120,7 +129,7 @@ export function calcStaticDrawdown(trades: Trade[]): number {
   )
   let peak = 0, running = 0, maxDD = 0
   sorted.forEach(t => {
-    running += Number(t.pnl)
+    running += getTradeTotalPnl(t)
     if (running > peak) peak = running
     const dd = peak - running
     if (dd > maxDD) maxDD = dd
@@ -138,7 +147,7 @@ export function calcStats(trades: Trade[]): TradeStats {
     }
   }
 
-  const pnls = trades.map(t => Number(t.pnl))
+  const pnls = trades.map(getTradeTotalPnl)
   const wins = pnls.filter(p => p > 0)
   const losses = pnls.filter(p => p < 0)
 

@@ -12,7 +12,7 @@ import {
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { cn, formatCurrency, calcTrailingDrawdown } from '@/lib/utils'
+import { cn, formatCurrency, calcTrailingDrawdown, getTradeTotalPnl } from '@/lib/utils'
 import type { PropFirm, PropFirmAccount, Trade } from '@/lib/db/schema'
 
 interface FirmWithAccounts extends PropFirm {
@@ -43,7 +43,7 @@ function calcProgress(account: PropFirmAccount, trades: Trade[]) {
   const accountTrades = trades.filter(t => t.propFirmAccountId === account.id)
 
   // Net closed P&L
-  const pnl = accountTrades.reduce((s, t) => s + Number(t.pnl), 0)
+  const pnl = accountTrades.reduce((s, t) => s + getTradeTotalPnl(t), 0)
 
   // Trading days
   const tradingDays = new Set(
@@ -54,7 +54,7 @@ function calcProgress(account: PropFirmAccount, trades: Trade[]) {
   const dailyMap: Record<string, number> = {}
   accountTrades.forEach(t => {
     const day = new Date(t.exitTime).toDateString()
-    dailyMap[day] = (dailyMap[day] ?? 0) + Number(t.pnl)
+    dailyMap[day] = (dailyMap[day] ?? 0) + getTradeTotalPnl(t)
   })
   const dailyValues = Object.values(dailyMap)
   const worstDay = dailyValues.length ? Math.min(...dailyValues) : 0
@@ -232,7 +232,7 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
                     {/* P&L summary strip */}
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { label: 'Net P&L',   value: formatCurrency(p.pnl),      color: p.pnl >= 0 ? 'text-emerald-500' : 'text-red-500' },
+                        { label: 'Total P/L', value: formatCurrency(p.pnl),      color: p.pnl >= 0 ? 'text-emerald-500' : 'text-red-500' },
                         { label: 'Best Day',  value: `+$${p.bestDay.toFixed(0)}`, color: 'text-emerald-500' },
                         { label: 'Worst Day', value: `$${p.worstDay.toFixed(0)}`, color: 'text-red-500' },
                       ].map(s => (

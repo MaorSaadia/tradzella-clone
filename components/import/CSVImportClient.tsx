@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useAccount } from '@/components/layout/AccountContext'
 
 // ── Parsed trade from CSV ─────────────────────────────────
 interface ParsedTrade {
@@ -151,6 +152,7 @@ function toISOString(ts: string): string {
 // ── Main Component ────────────────────────────────────────
 export function CSVImportClient() {
   const router = useRouter()
+  const { selected } = useAccount()
   const [step, setStep] = useState<'upload' | 'preview' | 'done'>('upload')
   const [totalFees, setTotalFees] = useState<string>('') // total fees from broker statement
   const [isDragging, setIsDragging] = useState(false)
@@ -206,6 +208,7 @@ export function CSVImportClient() {
         entryTime: toISOString(t.entryTime),
         exitTime: toISOString(t.exitTime),
         tradovateTradeId: `csv-${t.buyFillId}-${t.sellFillId}`,
+        propFirmAccountId: selected?.id ?? null,
       }))
 
       const res = await fetch('/api/trades/import', {
@@ -222,7 +225,11 @@ export function CSVImportClient() {
 
       setSavedCount(data.imported)
       setStep('done')
-      toast.success(`${data.imported} trades imported!`)
+      toast.success(
+        selected
+          ? `${data.imported} trades imported${data.linked ? `, ${data.linked} linked` : ''}!`
+          : `${data.imported} trades imported!`
+      )
       router.refresh()
     } catch {
       toast.error('Network error — please try again')
@@ -257,6 +264,11 @@ export function CSVImportClient() {
             <li>Click the <strong className="text-foreground">Export / Download icon</strong> (top right of the table)</li>
             <li>Upload the downloaded <strong className="text-foreground">Performance.csv</strong> here</li>
           </ol>
+          {selected && (
+            <p className="text-xs text-emerald-500 mt-3">
+              New imports will be linked to: <strong>{selected.firmName} · {selected.label}</strong>
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -316,17 +328,17 @@ export function CSVImportClient() {
         <div className="space-y-4">
           {/* Fees input + summary cards */}
           {(() => {
-            const grossPnl   = trades.reduce((s, t) => s + t.pnl, 0)
+            const reportedPnl = trades.reduce((s, t) => s + t.pnl, 0)
             const feesNum    = parseFloat(totalFees) || 0
-            const netPnl     = grossPnl - feesNum
+            const totalPnl    = reportedPnl - feesNum
             const summaryCards = [
               { label: 'Trades',   value: trades.length,  color: 'text-foreground' },
               { label: 'Winners',  value: wins.length,    color: 'text-emerald-500' },
               { label: 'Losers',   value: losses.length,  color: 'text-red-500' },
               {
-                label: feesNum > 0 ? 'Net P&L' : 'Gross P&L',
-                value: `${netPnl >= 0 ? '+' : '-'}$${Math.abs(netPnl).toFixed(2)}`,
-                color: netPnl >= 0 ? 'text-emerald-500' : 'text-red-500',
+                label: 'Total P/L',
+                value: `${totalPnl >= 0 ? '+' : '-'}$${Math.abs(totalPnl).toFixed(2)}`,
+                color: totalPnl >= 0 ? 'text-emerald-500' : 'text-red-500',
               },
             ]
             return (
@@ -341,7 +353,7 @@ export function CSVImportClient() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Enter the total fees from your broker statement (e.g. Tradovate → Account → Performance → &quot;Trade Fees & Comm.&quot;).
-                          We&apos;ll subtract it from your gross P&L to show your real Net P&L.
+                          We&apos;ll subtract it from reported P/L to show your real Total P/L.
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -357,15 +369,15 @@ export function CSVImportClient() {
                         />
                       </div>
                       <div className="text-right shrink-0 min-w-20">
-                        <p className="text-[10px] text-muted-foreground">Gross P&L</p>
-                        <p className={cn('text-sm font-black', grossPnl >= 0 ? 'text-emerald-500' : 'text-red-500')}>
-                          {grossPnl >= 0 ? '+' : '-'}${Math.abs(grossPnl).toFixed(2)}
+                        <p className="text-[10px] text-muted-foreground">Reported P/L</p>
+                        <p className={cn('text-sm font-black', reportedPnl >= 0 ? 'text-emerald-500' : 'text-red-500')}>
+                          {reportedPnl >= 0 ? '+' : '-'}${Math.abs(reportedPnl).toFixed(2)}
                         </p>
                         {feesNum > 0 && (
                           <>
-                            <p className="text-[10px] text-muted-foreground mt-1">After fees</p>
-                            <p className={cn('text-sm font-black', netPnl >= 0 ? 'text-emerald-500' : 'text-red-500')}>
-                              {netPnl >= 0 ? '+' : '-'}${Math.abs(netPnl).toFixed(2)}
+                            <p className="text-[10px] text-muted-foreground mt-1">Total P/L</p>
+                            <p className={cn('text-sm font-black', totalPnl >= 0 ? 'text-emerald-500' : 'text-red-500')}>
+                              {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toFixed(2)}
                             </p>
                           </>
                         )}

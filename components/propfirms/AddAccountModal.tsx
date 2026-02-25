@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
+import { getTradeTotalPnl } from '@/lib/utils'
 import type { Trade } from '@/lib/db/schema'
 
 const PRESET_RULES: Record<string, {
@@ -234,8 +235,8 @@ export function AddAccountModal({ firmId, onClose, onSaved, allTrades }: Props) 
                       className="rounded"
                     />
                     <span className="text-xs font-mono">{t.symbol}</span>
-                    <span className={`text-xs font-bold ml-auto ${Number(t.pnl) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                      {Number(t.pnl) >= 0 ? '+' : ''}${Number(t.pnl).toFixed(2)}
+                    <span className={`text-xs font-bold ml-auto ${getTradeTotalPnl(t) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {getTradeTotalPnl(t) >= 0 ? '+' : ''}${getTradeTotalPnl(t).toFixed(2)}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
                       {new Date(t.exitTime).toLocaleDateString()}

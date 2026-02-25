@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react'
 import { AlertTriangle, X, Bell } from 'lucide-react'
-import { cn, calcTrailingDrawdown } from '@/lib/utils'
+import { cn, calcTrailingDrawdown, getTradeTotalPnl } from '@/lib/utils'
 import { useAccount } from './AccountContext'
 import type { PropFirmAccount, Trade } from '@/lib/db/schema'
 
@@ -22,13 +22,13 @@ function buildAlerts(account: PropFirmAccount | null, trades: Trade[]): Alert[] 
   const alerts: Alert[] = []
 
   const accountTrades = trades.filter(t => t.propFirmAccountId === account.id)
-  const pnl = accountTrades.reduce((s, t) => s + Number(t.pnl), 0)
+  const pnl = accountTrades.reduce((s, t) => s + getTradeTotalPnl(t), 0)
 
   // Daily P&L
   const today = new Date().toDateString()
   const todayPnl = accountTrades
     .filter(t => new Date(t.exitTime).toDateString() === today)
-    .reduce((s, t) => s + Number(t.pnl), 0)
+    .reduce((s, t) => s + getTradeTotalPnl(t), 0)
 
   const dailyLimit = Number(account.dailyLossLimit ?? 0)
   if (dailyLimit > 0 && todayPnl < 0) {

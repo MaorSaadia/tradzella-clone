@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
-import { cn, formatCurrency, formatDateTime } from '@/lib/utils'
+import { cn, formatCurrency, formatDateTime, getTradeTotalPnl } from '@/lib/utils'
 import type { Trade } from '@/lib/db/schema'
 
 // ── Config ────────────────────────────────────────────────
@@ -102,7 +102,7 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
 
   if (!trade) return null
 
-  const pnl = Number(trade.pnl)
+  const pnl = getTradeTotalPnl(trade)
   const isWin = pnl > 0
 
   return (

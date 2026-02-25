@@ -17,7 +17,7 @@ import {
   CartesianGrid,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { calcStats, formatCurrency } from '@/lib/utils'
+import { calcStats, formatCurrency, getTradeTotalPnl } from '@/lib/utils'
 import { useTheme } from 'next-themes'
 import type { Trade } from '@/lib/db/schema'
 
@@ -114,7 +114,7 @@ export function SymbolChart({ trades }: ChartsProps) {
   // Aggregate P&L by symbol
   const symbolMap: Record<string, number> = {}
   trades.forEach(t => {
-    symbolMap[t.symbol] = (symbolMap[t.symbol] ?? 0) + Number(t.pnl)
+    symbolMap[t.symbol] = (symbolMap[t.symbol] ?? 0) + getTradeTotalPnl(t)
   })
 
   const data = Object.entries(symbolMap)

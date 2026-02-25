@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ArrowRight } from 'lucide-react'
 import Link from 'next/link'
-import { formatCurrency, formatDateTime } from '@/lib/utils'
+import { formatCurrency, formatDateTime, getTradeTotalPnl } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { Trade } from '@/lib/db/schema'
 
@@ -36,7 +36,7 @@ export function RecentTrades({ trades }: RecentTradesProps) {
         ) : (
           <div className="divide-y divide-border">
             {recent.map(trade => {
-              const pnl = Number(trade.pnl)
+              const pnl = getTradeTotalPnl(trade)
               const isWin = pnl > 0
               return (
                 <div

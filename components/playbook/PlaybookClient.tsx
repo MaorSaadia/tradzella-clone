@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency, getTradeTotalPnl } from '@/lib/utils'
 import { PlaybookModal } from './PlaybookModal'
 import { PlaybookDetailPanel } from './PlaybookDetailPanel'
 import { MistakeTracker } from './MistakeTracker'
@@ -50,7 +50,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
   const playbookStats = useMemo(() => {
     return playbooks.map(pb => {
       const pbTrades = allTrades.filter(t => t.playbookId === pb.id)
-      const pnls = pbTrades.map(t => Number(t.pnl))
+      const pnls = pbTrades.map(getTradeTotalPnl)
       const wins = pnls.filter(p => p > 0)
       const losses = pnls.filter(p => p < 0)
       const netPnl = pnls.reduce((s, p) => s + p, 0)
@@ -69,7 +69,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
       const trade = allTrades.find(t => t.id === m.tradeId)
       if (!counts[m.mistakeType]) counts[m.mistakeType] = { count: 0, pnlImpact: 0 }
       counts[m.mistakeType].count++
-      counts[m.mistakeType].pnlImpact += trade ? Number(trade.pnl) : 0
+      counts[m.mistakeType].pnlImpact += trade ? getTradeTotalPnl(trade) : 0
     })
     return Object.entries(counts)
       .map(([type, data]) => ({ type, ...data }))
@@ -80,7 +80,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
   const mistakeTrades = allTrades.filter(t => t.isMistake).length
   const cleanTrades = allTrades.filter(t => !t.isMistake && t.playbookId)
   const cleanWinRate = cleanTrades.length
-    ? (cleanTrades.filter(t => Number(t.pnl) > 0).length / cleanTrades.length) * 100
+    ? (cleanTrades.filter(t => getTradeTotalPnl(t) > 0).length / cleanTrades.length) * 100
     : 0
 
   return (
@@ -192,7 +192,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border">
-                          {['Strategy', 'Trades', 'Win Rate', 'Net P&L', 'Avg Win', 'Avg Loss', 'R:R'].map(h => (
+                          {['Strategy', 'Trades', 'Win Rate', 'Total P/L', 'Avg Win', 'Avg Loss', 'R:R'].map(h => (
                             <th key={h} className="text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                           ))}
                         </tr>
@@ -243,7 +243,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
               {/* Visual bars */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
-                  <CardHeader className="pb-3"><CardTitle className="text-sm">Net P&L by Strategy</CardTitle></CardHeader>
+                  <CardHeader className="pb-3"><CardTitle className="text-sm">Total P/L by Strategy</CardTitle></CardHeader>
                   <CardContent className="space-y-3">
                     {playbookStats.map(pb => {
                       const maxPnl = Math.max(...playbookStats.map(p => Math.abs(p.netPnl)))

@@ -7,7 +7,7 @@ import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn, formatCurrency, calcTrailingDrawdown } from '@/lib/utils'
+import { cn, formatCurrency, calcTrailingDrawdown, getTradeTotalPnl } from '@/lib/utils'
 import { Trophy, AlertTriangle, Shield } from 'lucide-react'
 import {
   ResponsiveContainer, Tooltip, LineChart, Line,
@@ -39,7 +39,7 @@ interface AccountMetrics {
 
 function calcAccountMetrics(account: PropFirmAccount, firm: PropFirm, allTrades: Trade[]): AccountMetrics {
   const accountTrades = allTrades.filter(t => t.propFirmAccountId === account.id)
-  const pnls = accountTrades.map(t => Number(t.pnl))
+  const pnls = accountTrades.map(getTradeTotalPnl)
   const wins = pnls.filter(p => p > 0)
   const losses = pnls.filter(p => p < 0)
 
@@ -54,7 +54,7 @@ function calcAccountMetrics(account: PropFirmAccount, firm: PropFirm, allTrades:
   const dailyMap: Record<string, number> = {}
   accountTrades.forEach(t => {
     const day = new Date(t.exitTime).toDateString()
-    dailyMap[day] = (dailyMap[day] ?? 0) + Number(t.pnl)
+    dailyMap[day] = (dailyMap[day] ?? 0) + getTradeTotalPnl(t)
   })
   const dailyValues = Object.values(dailyMap)
   const worstDay = dailyValues.length ? Math.min(...dailyValues) : 0
@@ -116,7 +116,7 @@ export function MultiAccountComparison({ firms, allTrades }: { firms: FirmWithAc
       let running = 0
       accountSeries[m.account.id] = {}
       sorted.forEach(t => {
-        running += Number(t.pnl)
+        running += getTradeTotalPnl(t)
         const date = new Date(t.exitTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         allDates.add(date)
         accountSeries[m.account.id][date] = running
@@ -178,7 +178,7 @@ export function MultiAccountComparison({ firms, allTrades }: { firms: FirmWithAc
               <div className={cn('text-lg font-black tabular-nums', m.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500')}>
                 {m.netPnl >= 0 ? '+' : ''}${Math.abs(m.netPnl).toFixed(0)}
               </div>
-              <p className="text-[10px] text-muted-foreground">Net P&L · {m.tradeCount} trades</p>
+              <p className="text-[10px] text-muted-foreground">Total P/L · {m.tradeCount} trades</p>
             </CardContent>
           </Card>
         ))}
@@ -212,7 +212,7 @@ export function MultiAccountComparison({ firms, allTrades }: { firms: FirmWithAc
                       <p className={cn('text-base font-black tabular-nums', m.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500')}>
                         {m.netPnl >= 0 ? '+' : ''}${Math.abs(m.netPnl).toFixed(0)}
                       </p>
-                      <p className="text-[10px] text-muted-foreground">Net P&L</p>
+                      <p className="text-[10px] text-muted-foreground">Total P/L</p>
                     </div>
                   </div>
                 </CardHeader>
@@ -279,7 +279,7 @@ export function MultiAccountComparison({ firms, allTrades }: { firms: FirmWithAc
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    {['Account', 'Firm', 'Stage', 'Trades', 'Win Rate', 'Net P&L', 'Profit Factor', 'DD Used', 'Health'].map(h => (
+                    {['Account', 'Firm', 'Stage', 'Trades', 'Win Rate', 'Total P/L', 'Profit Factor', 'DD Used', 'Health'].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                     ))}
                   </tr>

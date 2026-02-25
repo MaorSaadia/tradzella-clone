@@ -33,12 +33,15 @@ export async function GET(req: NextRequest) {
   }
 
   const weekTrades = await db
-    .select({ pnl: trades.pnl })
+    .select({ pnl: trades.pnl, commission: trades.commission, tradovateTradeId: trades.tradovateTradeId })
     .from(trades)
     .where(and(...conditions))
 
   const tradeCount = weekTrades.length
-  const netPnl     = weekTrades.reduce((sum, t) => sum + Number(t.pnl), 0)
+  const netPnl     = weekTrades.reduce((sum, t) => {
+    const isCsvImport = !!t.tradovateTradeId?.startsWith('csv-')
+    return sum + (isCsvImport ? Number(t.pnl) - Number(t.commission ?? 0) : Number(t.pnl))
+  }, 0)
 
   return NextResponse.json({ tradeCount, netPnl })
 }

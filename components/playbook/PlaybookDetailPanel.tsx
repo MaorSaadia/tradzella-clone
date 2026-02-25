@@ -8,7 +8,7 @@ import { X, Edit2, Trash2, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PlaybookModal } from './PlaybookModal'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency, getTradeTotalPnl } from '@/lib/utils'
 import type { Playbook, Trade } from '@/lib/db/schema'
 
 interface Props {
@@ -21,7 +21,7 @@ interface Props {
 export function PlaybookDetailPanel({ playbook, trades, onClose, onRefresh }: Props) {
   const [editOpen, setEditOpen] = useState(false)
 
-  const pnls = trades.map(t => Number(t.pnl))
+  const pnls = trades.map(getTradeTotalPnl)
   const wins = pnls.filter(p => p > 0)
   const losses = pnls.filter(p => p < 0)
   const netPnl = pnls.reduce((s, p) => s + p, 0)
@@ -78,7 +78,7 @@ export function PlaybookDetailPanel({ playbook, trades, onClose, onRefresh }: Pr
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: 'Net P&L', value: formatCurrency(netPnl), color: netPnl >= 0 ? 'text-emerald-500' : 'text-red-500' },
+              { label: 'Total P/L', value: formatCurrency(netPnl), color: netPnl >= 0 ? 'text-emerald-500' : 'text-red-500' },
               { label: 'Win Rate', value: `${winRate.toFixed(1)}%`, color: winRate >= 50 ? 'text-emerald-500' : 'text-red-500' },
               { label: 'Avg Win', value: `+$${avgWin.toFixed(2)}`, color: 'text-emerald-500' },
               { label: 'Avg Loss', value: `-$${avgLoss.toFixed(2)}`, color: 'text-red-500' },
@@ -134,8 +134,8 @@ export function PlaybookDetailPanel({ playbook, trades, onClose, onRefresh }: Pr
               <div className="space-y-1.5 max-h-60 overflow-y-auto">
                 {trades.slice(0, 20).map(t => (
                   <div key={t.id} className="flex items-center gap-2 text-xs py-1.5 border-b border-border/50">
-                    <span className={cn('font-bold', Number(t.pnl) >= 0 ? 'text-emerald-500' : 'text-red-500')}>
-                      {Number(t.pnl) >= 0 ? '+' : ''}${Number(t.pnl).toFixed(2)}
+                    <span className={cn('font-bold', getTradeTotalPnl(t) >= 0 ? 'text-emerald-500' : 'text-red-500')}>
+                      {getTradeTotalPnl(t) >= 0 ? '+' : ''}${getTradeTotalPnl(t).toFixed(2)}
                     </span>
                     <span className="text-muted-foreground">{t.symbol}</span>
                     <Badge variant="outline" className={cn('text-[9px] px-1 py-0 h-4',

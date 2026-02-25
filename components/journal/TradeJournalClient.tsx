@@ -16,7 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select'
 import { TradeNoteModal } from './TradeNoteModal'
-import { cn, formatCurrency, formatDateTime, calcStats } from '@/lib/utils'
+import { cn, formatCurrency, formatDateTime, calcStats, getTradeTotalPnl } from '@/lib/utils'
 import type { Trade } from '@/lib/db/schema'
 
 const PAGE_SIZE = 20
@@ -59,7 +59,7 @@ export function TradeJournalClient({ trades }: Props) {
   // Filter + sort
   const filtered = useMemo(() => {
     const result = localTrades.filter(t => {
-      const pnl = Number(t.pnl)
+      const pnl = getTradeTotalPnl(t)
       if (sideFilter !== 'all' && t.side !== sideFilter) return false
       if (resultFilter === 'win' && pnl <= 0) return false
       if (resultFilter === 'loss' && pnl >= 0) return false
@@ -77,7 +77,7 @@ export function TradeJournalClient({ trades }: Props) {
       let av: any, bv: any
       switch (sortKey) {
         case 'exitTime': av = new Date(a.exitTime).getTime(); bv = new Date(b.exitTime).getTime(); break
-        case 'pnl':      av = Number(a.pnl); bv = Number(b.pnl); break
+        case 'pnl':      av = getTradeTotalPnl(a); bv = getTradeTotalPnl(b); break
         case 'symbol':   av = a.symbol; bv = b.symbol; break
         case 'qty':      av = a.qty; bv = b.qty; break
       }
@@ -198,7 +198,7 @@ export function TradeJournalClient({ trades }: Props) {
       {filtered.length > 0 && (
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label: 'Net P&L', value: formatCurrency(stats.netPnl), color: stats.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500' },
+            { label: 'Total P/L', value: formatCurrency(stats.netPnl), color: stats.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500' },
             { label: 'Win Rate', value: `${stats.winRate.toFixed(1)}%`, color: 'text-blue-500' },
             { label: 'Avg Win', value: `+$${stats.avgWin.toFixed(2)}`, color: 'text-emerald-500' },
             { label: 'Avg Loss', value: `-$${stats.avgLoss.toFixed(2)}`, color: 'text-red-500' },
@@ -257,7 +257,7 @@ export function TradeJournalClient({ trades }: Props) {
                 </tr>
               ) : (
                 paginated.map(trade => {
-                  const pnl = Number(trade.pnl)
+                  const pnl = getTradeTotalPnl(trade)
                   const isWin = pnl > 0
                   return (
                     <tr

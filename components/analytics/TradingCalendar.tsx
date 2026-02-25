@@ -7,7 +7,7 @@ import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency, getTradeTotalPnl } from '@/lib/utils'
 import type { Trade } from '@/lib/db/schema'
 
 interface Props { trades: Trade[] }
@@ -39,9 +39,9 @@ export function TradingCalendar({ trades }: Props) {
       if (d.getFullYear() !== year || d.getMonth() !== month) return
       const day = d.getDate()
       if (!map[day]) map[day] = { pnl: 0, trades: 0, wins: 0, rMultiple: 0 }
-      map[day].pnl += Number(t.pnl)
+      map[day].pnl += getTradeTotalPnl(t)
       map[day].trades++
-      if (Number(t.pnl) > 0) map[day].wins++
+      if (getTradeTotalPnl(t) > 0) map[day].wins++
     })
     return map
   }, [trades, year, month])

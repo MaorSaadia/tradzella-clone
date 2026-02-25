@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency, getTradeTotalPnl } from '@/lib/utils'
 import type { Trade, TradeMistake } from '@/lib/db/schema'
 
 const MISTAKE_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
@@ -88,8 +88,8 @@ function LogMistakeModal({ open, onOpenChange, allTrades, onSaved }: LogMistakeM
               <SelectContent>
                 {recentTrades.map(t => (
                   <SelectItem key={t.id} value={t.id}>
-                    <span className={cn('font-bold mr-2', Number(t.pnl) >= 0 ? 'text-emerald-500' : 'text-red-500')}>
-                      {Number(t.pnl) >= 0 ? '+' : ''}${Number(t.pnl).toFixed(2)}
+                    <span className={cn('font-bold mr-2', getTradeTotalPnl(t) >= 0 ? 'text-emerald-500' : 'text-red-500')}>
+                      {getTradeTotalPnl(t) >= 0 ? '+' : ''}${getTradeTotalPnl(t).toFixed(2)}
                     </span>
                     {t.symbol} · {new Date(t.exitTime).toLocaleDateString()}
                   </SelectItem>
@@ -159,9 +159,9 @@ export function MistakeTracker({ allTrades, allMistakes, mistakeSummary, totalPn
   const cleanTrades = allTrades.filter(t => !t.isMistake)
   const mistakeRate = allTrades.length ? (mistakeTrades.length / allTrades.length) * 100 : 0
 
-  const cleanWins = cleanTrades.filter(t => Number(t.pnl) > 0)
+  const cleanWins = cleanTrades.filter(t => getTradeTotalPnl(t) > 0)
   const cleanWinRate = cleanTrades.length ? (cleanWins.length / cleanTrades.length) * 100 : 0
-  const mistakeWins = mistakeTrades.filter(t => Number(t.pnl) > 0)
+  const mistakeWins = mistakeTrades.filter(t => getTradeTotalPnl(t) > 0)
   const mistakeWinRate = mistakeTrades.length ? (mistakeWins.length / mistakeTrades.length) * 100 : 0
 
   return (
@@ -212,14 +212,14 @@ export function MistakeTracker({ allTrades, allMistakes, mistakeSummary, totalPn
                   label: '✅ Clean Trades',
                   trades: cleanTrades.length,
                   winRate: cleanWinRate,
-                  pnl: cleanTrades.reduce((s, t) => s + Number(t.pnl), 0),
+                  pnl: cleanTrades.reduce((s, t) => s + getTradeTotalPnl(t), 0),
                   color: 'emerald',
                 },
                 {
                   label: '❌ Mistake Trades',
                   trades: mistakeTrades.length,
                   winRate: mistakeWinRate,
-                  pnl: mistakeTrades.reduce((s, t) => s + Number(t.pnl), 0),
+                  pnl: mistakeTrades.reduce((s, t) => s + getTradeTotalPnl(t), 0),
                   color: 'red',
                 },
               ].map(col => (
@@ -237,7 +237,7 @@ export function MistakeTracker({ allTrades, allMistakes, mistakeSummary, totalPn
                       </span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Net P&L</span>
+                      <span className="text-muted-foreground">Total P/L</span>
                       <span className={cn('font-bold tabular-nums', col.pnl >= 0 ? 'text-emerald-500' : 'text-red-500')}>
                         {formatCurrency(col.pnl)}
                       </span>

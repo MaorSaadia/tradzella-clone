@@ -13,7 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TradingCalendar } from './TradingCalendar'
-import { calcStats, formatCurrency, formatDate } from '@/lib/utils'
+import { calcStats, formatCurrency, formatDate, getTradeTotalPnl } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { Trade } from '@/lib/db/schema'
 
@@ -45,7 +45,7 @@ export function AnalyticsClient({ trades }: Props) {
     const map: Record<string, number> = {}
     trades.forEach(t => {
       const day = formatDate(t.exitTime)
-      map[day] = (map[day] ?? 0) + Number(t.pnl)
+      map[day] = (map[day] ?? 0) + getTradeTotalPnl(t)
     })
     let cum = 0
     return Object.entries(map)
@@ -58,7 +58,7 @@ export function AnalyticsClient({ trades }: Props) {
 
   const distribution = useMemo(() => {
     if (!trades.length) return []
-    const pnls = trades.map(t => Number(t.pnl))
+    const pnls = trades.map(getTradeTotalPnl)
     const min = Math.floor(Math.min(...pnls) / 50) * 50
     const max = Math.ceil(Math.max(...pnls) / 50) * 50
     const buckets: Record<string, { label: string; count: number; isWin: boolean }> = {}
@@ -78,7 +78,7 @@ export function AnalyticsClient({ trades }: Props) {
     days.forEach((_, i) => { map[i] = { pnl: 0, count: 0 } })
     trades.forEach(t => {
       const dow = new Date(t.exitTime).getDay()
-      map[dow].pnl += Number(t.pnl)
+      map[dow].pnl += getTradeTotalPnl(t)
       map[dow].count++
     })
     return days.map((name, i) => ({
@@ -91,7 +91,7 @@ export function AnalyticsClient({ trades }: Props) {
     for (let h = 0; h < 24; h++) map[h] = { pnl: 0, count: 0 }
     trades.forEach(t => {
       const h = new Date(t.exitTime).getHours()
-      map[h].pnl += Number(t.pnl); map[h].count++
+      map[h].pnl += getTradeTotalPnl(t); map[h].count++
     })
     return Object.entries(map).filter(([, v]) => v.count > 0)
       .map(([hour, v]) => ({ hour: `${hour.padStart(2, '0')}:00`, pnl: Number(v.pnl.toFixed(2)), trades: v.count }))
@@ -101,8 +101,8 @@ export function AnalyticsClient({ trades }: Props) {
     const map: Record<string, { pnl: number; count: number; wins: number }> = {}
     trades.forEach(t => {
       if (!map[t.symbol]) map[t.symbol] = { pnl: 0, count: 0, wins: 0 }
-      map[t.symbol].pnl += Number(t.pnl); map[t.symbol].count++
-      if (Number(t.pnl) > 0) map[t.symbol].wins++
+      map[t.symbol].pnl += getTradeTotalPnl(t); map[t.symbol].count++
+      if (getTradeTotalPnl(t) > 0) map[t.symbol].wins++
     })
     return Object.entries(map).map(([symbol, v]) => ({
       symbol, pnl: Number(v.pnl.toFixed(2)), trades: v.count,
@@ -114,8 +114,8 @@ export function AnalyticsClient({ trades }: Props) {
     const sorted = [...trades].sort((a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime())
     let maxWin = 0, maxLoss = 0, curWin = 0, curLoss = 0
     sorted.forEach(t => {
-      if (Number(t.pnl) > 0) { curWin++; curLoss = 0; maxWin = Math.max(maxWin, curWin) }
-      else if (Number(t.pnl) < 0) { curLoss++; curWin = 0; maxLoss = Math.max(maxLoss, curLoss) }
+      if (getTradeTotalPnl(t) > 0) { curWin++; curLoss = 0; maxWin = Math.max(maxWin, curWin) }
+      else if (getTradeTotalPnl(t) < 0) { curLoss++; curWin = 0; maxLoss = Math.max(maxLoss, curLoss) }
     })
     return { maxWin, maxLoss }
   }, [trades])
@@ -123,7 +123,7 @@ export function AnalyticsClient({ trades }: Props) {
   const scatter = useMemo(() =>
     trades.map(t => ({
       hour: new Date(t.entryTime).getHours() + new Date(t.entryTime).getMinutes() / 60,
-      pnl: Number(t.pnl),
+      pnl: getTradeTotalPnl(t),
       symbol: t.symbol,
     })), [trades])
 
@@ -311,7 +311,7 @@ export function AnalyticsClient({ trades }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  {['Symbol', 'Trades', 'Win Rate', 'Net P&L', 'Avg P&L'].map(h => (
+                  {['Symbol', 'Trades', 'Win Rate', 'Total P/L', 'Avg P/L'].map(h => (
                     <th key={h} className="text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                   ))}
                 </tr>
@@ -345,7 +345,7 @@ export function AnalyticsClient({ trades }: Props) {
         </Card>
 
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Net P&L by Symbol</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Total P/L by Symbol</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={bySymbol} layout="vertical" margin={{ top: 4, right: 60, left: 8, bottom: 0 }}>

@@ -37,6 +37,12 @@ export function FilteredDashboard({ allTrades, isConnected }: Props) {
         </p>
       </div>
 
+      {selected && trades.length === 0 && allTrades.length > 0 && (
+        <div className="text-xs rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-500 px-3 py-2">
+          No trades are linked to this account yet. Switch to <strong>All Accounts</strong> or re-import while this account is selected.
+        </div>
+      )}
+
       {!isConnected && trades.length === 0 && <ConnectBanner />}
 
       {/* Pass trades directly — StatsCards calls calcStats internally */}

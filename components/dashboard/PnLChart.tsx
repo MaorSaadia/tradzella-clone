@@ -15,7 +15,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, getTradeTotalPnl } from '@/lib/utils'
 import { useTheme } from 'next-themes'
 import type { Trade } from '@/lib/db/schema'
 
@@ -34,11 +34,12 @@ export function PnLChart({ trades }: PnLChartProps) {
 
   let cumulative = 0
   const data = sorted.map(trade => {
-    cumulative += Number(trade.pnl)
+    const tradePnl = getTradeTotalPnl(trade)
+    cumulative += tradePnl
     return {
       date: formatDate(trade.exitTime),
       pnl: Number(cumulative.toFixed(2)),
-      tradePnl: Number(trade.pnl),
+      tradePnl: Number(tradePnl.toFixed(2)),
     }
   })
 
