@@ -3,15 +3,16 @@
 
 // components/journal/TradeJournalClient.tsx
 
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   Search, ArrowUpDown,
-  ArrowUp, ArrowDown, ChevronLeft, ChevronRight
+  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select'
@@ -39,35 +40,147 @@ const EMOTION_ICONS: Record<string, string> = {
 
 interface Props { trades: Trade[] }
 
+type PartialTrade = {
+  id: string
+  qty: number
+  exitPrice: number
+  exitTime: Date | string
+  pnl: number
+}
+
+type ConsolidatedTrade = {
+  key: string
+  representative: Trade
+  symbol: string
+  side: Trade['side']
+  entryPrice: number
+  entryTime: Date | string
+  avgExitPrice: number
+  exitTime: Date | string
+  qty: number
+  pnl: number
+  tags: string[]
+  notes: string
+  grade: Trade['grade']
+  emotion: Trade['emotion']
+  partials: PartialTrade[]
+}
+
 export function TradeJournalClient({ trades }: Props) {
   const [search, setSearch] = useState('')
   const [sideFilter, setSideFilter] = useState<'all' | 'long' | 'short'>('all')
   const [resultFilter, setResultFilter] = useState<'all' | 'win' | 'loss'>('all')
   const [symbolFilter, setSymbolFilter] = useState('all')
+  const [consolidatePartials, setConsolidatePartials] = useState(true)
   const [sortKey, setSortKey] = useState<SortKey>('exitTime')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [localTrades, setLocalTrades] = useState<Trade[]>(trades)
+
+  useEffect(() => {
+    setLocalTrades(trades)
+  }, [trades])
+
+  const consolidatedTrades = useMemo<ConsolidatedTrade[]>(() => {
+    const groups = new Map<string, Trade[]>()
+    for (const trade of localTrades) {
+      const key = [
+        trade.symbol,
+        trade.side,
+        Number(trade.entryPrice).toFixed(4),
+        new Date(trade.entryTime).getTime().toString(),
+      ].join('|')
+      const existing = groups.get(key)
+      if (existing) existing.push(trade)
+      else groups.set(key, [trade])
+    }
+
+    return Array.from(groups.entries()).map(([key, groupedTrades]) => {
+      const ordered = [...groupedTrades].sort(
+        (a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime()
+      )
+
+      const representative =
+        ordered.find(t => (t.notes?.trim()?.length ?? 0) > 0) ??
+        ordered.find(t => (t.tags?.length ?? 0) > 0) ??
+        ordered[0]
+
+      const qty = ordered.reduce((sum, t) => sum + t.qty, 0)
+      const weightedExit = ordered.reduce((sum, t) => sum + Number(t.exitPrice) * t.qty, 0)
+      const pnl = ordered.reduce((sum, t) => sum + getTradeTotalPnl(t), 0)
+      const latestExit = ordered[ordered.length - 1]?.exitTime ?? representative.exitTime
+
+      const tags = Array.from(
+        new Set(ordered.flatMap(t => t.tags ?? []))
+      )
+
+      const notes = ordered
+        .map(t => t.notes?.trim())
+        .filter((n): n is string => !!n)
+        .join(' | ')
+
+      const grade =
+        ordered.find(t => !!t.grade)?.grade ??
+        representative.grade ??
+        null
+
+      const emotion =
+        ordered.find(t => !!t.emotion)?.emotion ??
+        representative.emotion ??
+        null
+
+      const partials: PartialTrade[] = ordered.map(t => ({
+        id: t.id,
+        qty: t.qty,
+        exitPrice: Number(t.exitPrice),
+        exitTime: t.exitTime,
+        pnl: getTradeTotalPnl(t),
+      }))
+
+      return {
+        key,
+        representative,
+        symbol: representative.symbol,
+        side: representative.side,
+        entryPrice: Number(representative.entryPrice),
+        entryTime: representative.entryTime,
+        avgExitPrice: qty > 0 ? weightedExit / qty : Number(representative.exitPrice),
+        exitTime: latestExit,
+        qty,
+        pnl,
+        tags,
+        notes,
+        grade,
+        emotion,
+        partials,
+      }
+    })
+  }, [localTrades])
 
   // Unique symbols for filter dropdown
   const symbols = useMemo(() =>
-    ['all', ...Array.from(new Set(localTrades.map(t => t.symbol))).sort()],
-    [localTrades]
+    ['all', ...Array.from(new Set(
+      (consolidatePartials ? consolidatedTrades : localTrades).map(t => t.symbol)
+    )).sort()],
+    [localTrades, consolidatedTrades, consolidatePartials]
   )
 
   // Filter + sort
   const filtered = useMemo(() => {
-    const result = localTrades.filter(t => {
-      const pnl = getTradeTotalPnl(t)
+    const source = consolidatePartials ? consolidatedTrades : localTrades
+    const result = source.filter(t => {
+      const pnl = consolidatePartials ? (t as ConsolidatedTrade).pnl : getTradeTotalPnl(t as Trade)
       if (sideFilter !== 'all' && t.side !== sideFilter) return false
       if (resultFilter === 'win' && pnl <= 0) return false
       if (resultFilter === 'loss' && pnl >= 0) return false
       if (symbolFilter !== 'all' && t.symbol !== symbolFilter) return false
       if (search) {
         const q = search.toLowerCase()
+        const notes = (t.notes ?? '').toLowerCase()
         if (!t.symbol.toLowerCase().includes(q) &&
-            !t.notes?.toLowerCase().includes(q) &&
+            !notes.includes(q) &&
             !t.tags?.some(tag => tag.toLowerCase().includes(q))) return false
       }
       return true
@@ -77,7 +190,10 @@ export function TradeJournalClient({ trades }: Props) {
       let av: any, bv: any
       switch (sortKey) {
         case 'exitTime': av = new Date(a.exitTime).getTime(); bv = new Date(b.exitTime).getTime(); break
-        case 'pnl':      av = getTradeTotalPnl(a); bv = getTradeTotalPnl(b); break
+        case 'pnl':
+          av = consolidatePartials ? (a as ConsolidatedTrade).pnl : getTradeTotalPnl(a as Trade)
+          bv = consolidatePartials ? (b as ConsolidatedTrade).pnl : getTradeTotalPnl(b as Trade)
+          break
         case 'symbol':   av = a.symbol; bv = b.symbol; break
         case 'qty':      av = a.qty; bv = b.qty; break
       }
@@ -87,10 +203,30 @@ export function TradeJournalClient({ trades }: Props) {
     })
 
     return result
-  }, [localTrades, sideFilter, resultFilter, symbolFilter, search, sortKey, sortDir])
+  }, [
+    localTrades, consolidatedTrades, consolidatePartials, sideFilter,
+    resultFilter, symbolFilter, search, sortKey, sortDir
+  ])
 
   // Stats for filtered set
-  const stats = useMemo(() => calcStats(filtered as any), [filtered])
+  const stats = useMemo(() => {
+    if (!consolidatePartials) return calcStats(filtered as Trade[])
+    const consolidatedAsTrades = (filtered as ConsolidatedTrade[]).map(t => {
+      const base = t.representative
+      return {
+        ...base,
+        qty: t.qty,
+        pnl: t.pnl.toFixed(2),
+        exitPrice: t.avgExitPrice.toFixed(4),
+        exitTime: t.exitTime,
+        tags: t.tags,
+        notes: t.notes,
+        grade: t.grade,
+        emotion: t.emotion,
+      } as Trade
+    })
+    return calcStats(consolidatedAsTrades)
+  }, [filtered, consolidatePartials])
 
   // Pagination
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
@@ -113,6 +249,10 @@ export function TradeJournalClient({ trades }: Props) {
   function handleTradeUpdated(updated: Trade) {
     setLocalTrades(prev => prev.map(t => t.id === updated.id ? updated : t))
     setSelectedTrade(updated)
+  }
+
+  function toggleGroupExpand(key: string) {
+    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
   const activeFilters = [
@@ -177,6 +317,19 @@ export function TradeJournalClient({ trades }: Props) {
               {r === 'all' ? 'All' : r === 'win' ? 'Winners' : 'Losers'}
             </button>
           ))}
+        </div>
+
+        {/* Consolidate partials */}
+        <div className="flex items-center gap-2 rounded-lg border border-border px-3 h-9">
+          <Switch
+            checked={consolidatePartials}
+            onCheckedChange={checked => {
+              setConsolidatePartials(checked)
+              setExpandedGroups({})
+              setPage(1)
+            }}
+          />
+          <span className="text-xs font-semibold">Consolidate partials</span>
         </div>
 
         {/* Clear */}
@@ -256,109 +409,185 @@ export function TradeJournalClient({ trades }: Props) {
                   </td>
                 </tr>
               ) : (
-                paginated.map(trade => {
-                  const pnl = getTradeTotalPnl(trade)
+                (paginated as Array<Trade | ConsolidatedTrade>).map(item => {
+                  const isGrouped = consolidatePartials
+                  const trade = isGrouped ? (item as ConsolidatedTrade).representative : (item as Trade)
+                  const qty = isGrouped ? (item as ConsolidatedTrade).qty : trade.qty
+                  const entryPrice = isGrouped ? (item as ConsolidatedTrade).entryPrice : Number(trade.entryPrice)
+                  const exitPrice = isGrouped ? (item as ConsolidatedTrade).avgExitPrice : Number(trade.exitPrice)
+                  const pnl = isGrouped ? (item as ConsolidatedTrade).pnl : getTradeTotalPnl(trade)
+                  const exitTime = isGrouped ? (item as ConsolidatedTrade).exitTime : trade.exitTime
+                  const tags = isGrouped ? (item as ConsolidatedTrade).tags : (trade.tags ?? [])
+                  const notes = isGrouped ? (item as ConsolidatedTrade).notes : (trade.notes ?? '')
+                  const grade = isGrouped ? (item as ConsolidatedTrade).grade : trade.grade
+                  const emotion = isGrouped ? (item as ConsolidatedTrade).emotion : trade.emotion
+                  const groupKey = isGrouped ? (item as ConsolidatedTrade).key : null
+                  const partials = isGrouped ? (item as ConsolidatedTrade).partials : []
+                  const isExpanded = groupKey ? !!expandedGroups[groupKey] : false
                   const isWin = pnl > 0
+
                   return (
-                    <tr
-                      key={trade.id}
-                      className="border-b border-border/50 hover:bg-accent/40 cursor-pointer transition-colors group"
-                      onClick={() => setSelectedTrade(trade)}
-                    >
-                      {/* Date */}
-                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDateTime(trade.exitTime)}
-                      </td>
+                    <>
+                      <tr
+                        key={groupKey ?? trade.id}
+                        className="border-b border-border/50 hover:bg-accent/40 transition-colors group"
+                        onClick={() => {
+                          if (isGrouped && groupKey) toggleGroupExpand(groupKey)
+                          else setSelectedTrade(trade)
+                        }}
+                      >
+                        {/* Date */}
+                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                          {isGrouped && groupKey && (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                toggleGroupExpand(groupKey)
+                              }}
+                              className="mr-1.5 inline-flex align-middle text-muted-foreground hover:text-foreground"
+                              aria-label={isExpanded ? 'Collapse partials' : 'Expand partials'}
+                            >
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
+                          {formatDateTime(exitTime)}
+                        </td>
 
-                      {/* Symbol */}
-                      <td className="px-4 py-3">
-                        <span className="text-sm font-bold">{trade.symbol}</span>
-                      </td>
+                        {/* Symbol */}
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-bold">{trade.symbol}</span>
+                        </td>
 
-                      {/* Side */}
-                      <td className="px-4 py-3">
-                        <Badge variant="outline" className={cn(
-                          'text-[10px] px-1.5 py-0 h-4',
-                          trade.side === 'long'
-                            ? 'border-emerald-500/40 text-emerald-500'
-                            : 'border-red-500/40 text-red-500'
-                        )}>
-                          {trade.side.toUpperCase()}
-                        </Badge>
-                      </td>
-
-                      {/* Entry */}
-                      <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
-                        {Number(trade.entryPrice).toFixed(2)}
-                      </td>
-
-                      {/* Exit */}
-                      <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
-                        {Number(trade.exitPrice).toFixed(2)}
-                      </td>
-
-                      {/* Qty */}
-                      <td className="px-4 py-3 text-xs text-center">{trade.qty}</td>
-
-                      {/* P&L */}
-                      <td className={cn(
-                        'px-4 py-3 text-sm font-bold tabular-nums',
-                        isWin ? 'text-emerald-500' : 'text-red-500'
-                      )}>
-                        {formatCurrency(pnl)}
-                      </td>
-
-                      {/* Grade */}
-                      <td className="px-4 py-3">
-                        {trade.grade ? (
-                          <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', GRADE_COLORS[trade.grade])}>
-                            {trade.grade}
+                        {/* Side */}
+                        <td className="px-4 py-3">
+                          <Badge variant="outline" className={cn(
+                            'text-[10px] px-1.5 py-0 h-4',
+                            trade.side === 'long'
+                              ? 'border-emerald-500/40 text-emerald-500'
+                              : 'border-red-500/40 text-red-500'
+                          )}>
+                            {trade.side.toUpperCase()}
                           </Badge>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
-                            + grade
-                          </span>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Tags */}
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1 flex-wrap">
-                          {trade.tags && trade.tags.length > 0 ? (
-                            trade.tags.slice(0, 2).map(tag => (
-                              <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                                {tag}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
-                              + tags
+                        {/* Entry */}
+                        <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
+                          {entryPrice.toFixed(2)}
+                        </td>
+
+                        {/* Exit */}
+                        <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
+                          {exitPrice.toFixed(2)}
+                          {isGrouped && partials.length > 1 && (
+                            <span className="block text-[10px] text-muted-foreground/70">
+                              avg of {partials.length} partials
                             </span>
                           )}
-                          {trade.tags && trade.tags.length > 2 && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                              +{trade.tags.length - 2}
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Notes preview */}
-                      <td className="px-4 py-3 max-w-40">
-                        {trade.emotion && (
-                          <span className="mr-1">{EMOTION_ICONS[trade.emotion]}</span>
-                        )}
-                        {trade.notes ? (
-                          <span className="text-xs text-muted-foreground truncate block max-w-35">
-                            {trade.notes}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
-                            + note
-                          </span>
-                        )}
-                      </td>
-                    </tr>
+                        {/* Qty */}
+                        <td className="px-4 py-3 text-xs text-center">{qty}</td>
+
+                        {/* P&L */}
+                        <td className={cn(
+                          'px-4 py-3 text-sm font-bold tabular-nums',
+                          isWin ? 'text-emerald-500' : 'text-red-500'
+                        )}>
+                          {formatCurrency(pnl)}
+                        </td>
+
+                        {/* Grade */}
+                        <td className="px-4 py-3">
+                          {grade ? (
+                            <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', GRADE_COLORS[grade])}>
+                              {grade}
+                            </Badge>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
+                              + grade
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Tags */}
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1 flex-wrap">
+                            {tags.length > 0 ? (
+                              tags.slice(0, 2).map(tag => (
+                                <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                  {tag}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
+                                + tags
+                              </span>
+                            )}
+                            {tags.length > 2 && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                +{tags.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Notes preview */}
+                        <td className="px-4 py-3 max-w-40">
+                          {emotion && (
+                            <span className="mr-1">{EMOTION_ICONS[emotion]}</span>
+                          )}
+                          {notes ? (
+                            <span className="text-xs text-muted-foreground truncate block max-w-35">
+                              {notes}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
+                              + note
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+
+                      {isGrouped && isExpanded && partials.length > 0 && (
+                        <tr className="border-b border-border/50 bg-accent/20">
+                          <td colSpan={10} className="px-4 py-3">
+                            <div className="space-y-1.5">
+                              {partials.map((partial, index) => (
+                                <div
+                                  key={partial.id}
+                                  className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center text-xs px-2 py-1.5 rounded border border-border/50"
+                                >
+                                  <span className="text-muted-foreground">
+                                    Partial {index + 1} - {formatDateTime(partial.exitTime)}
+                                  </span>
+                                  <span className="font-mono text-muted-foreground">
+                                    Exit {partial.exitPrice.toFixed(2)}
+                                  </span>
+                                  <span>Qty {partial.qty}</span>
+                                  <span className={cn(
+                                    'font-semibold tabular-nums',
+                                    partial.pnl >= 0 ? 'text-emerald-500' : 'text-red-500'
+                                  )}>
+                                    {formatCurrency(partial.pnl)}
+                                  </span>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 text-[10px]"
+                                    onClick={() => {
+                                      const partialTrade = localTrades.find(t => t.id === partial.id)
+                                      if (partialTrade) setSelectedTrade(partialTrade)
+                                    }}
+                                  >
+                                    Open note
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   )
                 })
               )}

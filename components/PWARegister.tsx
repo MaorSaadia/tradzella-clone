@@ -15,6 +15,16 @@ export function PWARegister() {
   const [isInstalled, setIsInstalled] = useState(false)
 
   useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      // Avoid stale app-shell/chunk issues during local dev.
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((reg) => reg.unregister())
+        })
+      }
+      return
+    }
+
     // Register service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js')
