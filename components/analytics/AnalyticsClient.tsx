@@ -3,7 +3,7 @@
 
 // components/analytics/AnalyticsClient.tsx
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
 import {
   BarChart, Bar, XAxis, YAxis,
@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Switch } from '@/components/ui/switch'
 import { TradingCalendar } from './TradingCalendar'
 import { calcStats, formatCurrency, formatDate, getTradeTotalPnl } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -34,16 +35,65 @@ function ChartTooltip({ active, payload, label, formatter }: any) {
 }
 
 export function AnalyticsClient({ trades }: Props) {
+  const [consolidatePartials, setConsolidatePartials] = useState(true)
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const gridColor = isDark ? '#1e293b' : '#f1f5f9'
   const axisColor = '#64748b'
 
-  const stats = useMemo(() => calcStats(trades as any), [trades])
+  const displayTrades = useMemo(() => {
+    if (!consolidatePartials) return trades
+
+    const groups = new Map<string, Trade[]>()
+    for (const trade of trades) {
+      const key = [
+        trade.symbol,
+        trade.side,
+        Number(trade.entryPrice).toFixed(4),
+        new Date(trade.entryTime).getTime().toString(),
+      ].join('|')
+      const existing = groups.get(key)
+      if (existing) existing.push(trade)
+      else groups.set(key, [trade])
+    }
+
+    return Array.from(groups.values()).map(group => {
+      const ordered = [...group].sort(
+        (a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime()
+      )
+      const representative =
+        ordered.find(t => (t.notes?.trim()?.length ?? 0) > 0) ??
+        ordered.find(t => (t.tags?.length ?? 0) > 0) ??
+        ordered[0]
+      const qty = ordered.reduce((sum, t) => sum + t.qty, 0)
+      const weightedExit = ordered.reduce((sum, t) => sum + Number(t.exitPrice) * t.qty, 0)
+      const pnl = ordered.reduce((sum, t) => sum + getTradeTotalPnl(t), 0)
+      const latestExit = ordered[ordered.length - 1]?.exitTime ?? representative.exitTime
+      const tags = Array.from(new Set(ordered.flatMap(t => t.tags ?? [])))
+      const notes = ordered
+        .map(t => t.notes?.trim())
+        .filter((n): n is string => !!n)
+        .join(' | ')
+
+      return {
+        ...representative,
+        tradovateTradeId: `consolidated-${representative.id}`,
+        qty,
+        pnl: pnl.toFixed(2),
+        commission: '0',
+        exitPrice: (qty > 0 ? weightedExit / qty : Number(representative.exitPrice)).toFixed(4),
+        exitTime: latestExit,
+        tags,
+        notes,
+      }
+    })
+  }, [trades, consolidatePartials])
+
+  const stats = useMemo(() => calcStats(displayTrades as any), [displayTrades])
 
   const dailyPnl = useMemo(() => {
     const map: Record<string, number> = {}
-    trades.forEach(t => {
+    displayTrades.forEach(t => {
       const day = formatDate(t.exitTime)
       map[day] = (map[day] ?? 0) + getTradeTotalPnl(t)
     })
@@ -54,11 +104,11 @@ export function AnalyticsClient({ trades }: Props) {
         cum += pnl
         return { date, dayPnl: Number(pnl.toFixed(2)), cumPnl: Number(cum.toFixed(2)) }
       })
-  }, [trades])
+  }, [displayTrades])
 
   const distribution = useMemo(() => {
-    if (!trades.length) return []
-    const pnls = trades.map(getTradeTotalPnl)
+    if (!displayTrades.length) return []
+    const pnls = displayTrades.map(getTradeTotalPnl)
     const min = Math.floor(Math.min(...pnls) / 50) * 50
     const max = Math.ceil(Math.max(...pnls) / 50) * 50
     const buckets: Record<string, { label: string; count: number; isWin: boolean }> = {}
@@ -70,13 +120,13 @@ export function AnalyticsClient({ trades }: Props) {
       if (buckets[bucket]) buckets[bucket].count++
     })
     return Object.values(buckets)
-  }, [trades])
+  }, [displayTrades])
 
   const byDow = useMemo(() => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     const map: Record<number, { pnl: number; count: number }> = {}
     days.forEach((_, i) => { map[i] = { pnl: 0, count: 0 } })
-    trades.forEach(t => {
+    displayTrades.forEach(t => {
       const dow = new Date(t.exitTime).getDay()
       map[dow].pnl += getTradeTotalPnl(t)
       map[dow].count++
@@ -84,22 +134,22 @@ export function AnalyticsClient({ trades }: Props) {
     return days.map((name, i) => ({
       day: name.slice(0, 3), pnl: Number(map[i].pnl.toFixed(2)), trades: map[i].count,
     })).filter(d => d.trades > 0)
-  }, [trades])
+  }, [displayTrades])
 
   const byHour = useMemo(() => {
     const map: Record<number, { pnl: number; count: number }> = {}
     for (let h = 0; h < 24; h++) map[h] = { pnl: 0, count: 0 }
-    trades.forEach(t => {
+    displayTrades.forEach(t => {
       const h = new Date(t.exitTime).getHours()
       map[h].pnl += getTradeTotalPnl(t); map[h].count++
     })
     return Object.entries(map).filter(([, v]) => v.count > 0)
       .map(([hour, v]) => ({ hour: `${hour.padStart(2, '0')}:00`, pnl: Number(v.pnl.toFixed(2)), trades: v.count }))
-  }, [trades])
+  }, [displayTrades])
 
   const bySymbol = useMemo(() => {
     const map: Record<string, { pnl: number; count: number; wins: number }> = {}
-    trades.forEach(t => {
+    displayTrades.forEach(t => {
       if (!map[t.symbol]) map[t.symbol] = { pnl: 0, count: 0, wins: 0 }
       map[t.symbol].pnl += getTradeTotalPnl(t); map[t.symbol].count++
       if (getTradeTotalPnl(t) > 0) map[t.symbol].wins++
@@ -108,26 +158,26 @@ export function AnalyticsClient({ trades }: Props) {
       symbol, pnl: Number(v.pnl.toFixed(2)), trades: v.count,
       winRate: Math.round((v.wins / v.count) * 100),
     })).sort((a, b) => b.pnl - a.pnl)
-  }, [trades])
+  }, [displayTrades])
 
   const streaks = useMemo(() => {
-    const sorted = [...trades].sort((a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime())
+    const sorted = [...displayTrades].sort((a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime())
     let maxWin = 0, maxLoss = 0, curWin = 0, curLoss = 0
     sorted.forEach(t => {
       if (getTradeTotalPnl(t) > 0) { curWin++; curLoss = 0; maxWin = Math.max(maxWin, curWin) }
       else if (getTradeTotalPnl(t) < 0) { curLoss++; curWin = 0; maxLoss = Math.max(maxLoss, curLoss) }
     })
     return { maxWin, maxLoss }
-  }, [trades])
+  }, [displayTrades])
 
   const scatter = useMemo(() =>
-    trades.map(t => ({
+    displayTrades.map(t => ({
       hour: new Date(t.entryTime).getHours() + new Date(t.entryTime).getMinutes() / 60,
       pnl: getTradeTotalPnl(t),
       symbol: t.symbol,
-    })), [trades])
+    })), [displayTrades])
 
-  if (!trades.length) {
+  if (!displayTrades.length) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
         Import trades to see your analytics
@@ -137,16 +187,27 @@ export function AnalyticsClient({ trades }: Props) {
 
   return (
     <Tabs defaultValue="diary">
-      <TabsList className="mb-6">
-        <TabsTrigger value="diary">📅 Trading Diary</TabsTrigger>
-        <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="timing">Timing</TabsTrigger>
-        <TabsTrigger value="symbols">Symbols</TabsTrigger>
-      </TabsList>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <TabsList>
+          <TabsTrigger value="diary">Trading Diary</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="timing">Timing</TabsTrigger>
+          <TabsTrigger value="symbols">Symbols</TabsTrigger>
+        </TabsList>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 rounded-lg border border-border px-3 h-9">
+            <Switch checked={consolidatePartials} onCheckedChange={setConsolidatePartials} />
+            <span className="text-xs font-semibold">Consolidate partials</span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {displayTrades.length} trade{displayTrades.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
 
       {/* ══════════════ DIARY TAB ══════════════ */}
       <TabsContent value="diary" className="space-y-4">
-        <TradingCalendar trades={trades} />
+        <TradingCalendar trades={displayTrades} />
       </TabsContent>
 
       {/* ══════════════ OVERVIEW TAB ══════════════ */}
@@ -366,3 +427,6 @@ export function AnalyticsClient({ trades }: Props) {
     </Tabs>
   )
 }
+
+
+

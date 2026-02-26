@@ -215,8 +215,10 @@ export function TradeJournalClient({ trades }: Props) {
       const base = t.representative
       return {
         ...base,
+        tradovateTradeId: `consolidated-${base.id}`,
         qty: t.qty,
         pnl: t.pnl.toFixed(2),
+        commission: '0',
         exitPrice: t.avgExitPrice.toFixed(4),
         exitTime: t.exitTime,
         tags: t.tags,
