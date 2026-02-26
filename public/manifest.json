@@ -1,6 +1,6 @@
 {
-  "name": "TradZella",
-  "short_name": "TradZella",
+  "name": "MSFunded",
+  "short_name": "MSFunded",
   "description": "Prop firm trading journal and performance tracker",
   "start_url": "/dashboard",
   "display": "standalone",
@@ -9,19 +9,22 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/msfunded-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/msfunded-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["finance", "productivity"],
+  "categories": [
+    "finance",
+    "productivity"
+  ],
   "screenshots": [
     {
       "src": "/screenshot-dashboard.png",

@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client'
 
 // components/layout/Sidebar.tsx — Updated with Review link
@@ -60,12 +61,14 @@ export function Sidebar({ user }: SidebarProps) {
   return (
     <aside className="w-56 h-screen bg-card border-r border-border flex flex-col shrink-0">
       {/* Logo */}
-      <div className="h-16 flex items-center px-5 border-b border-border gap-2.5 shrink-0">
-        <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0">
-          <span className="text-black font-black text-sm">T</span>
-        </div>
-        <span className="font-black text-base tracking-tight">
-          Trad<span className="text-emerald-500">Zella</span>
+      <div className="h-16 flex items-center px-4 border-b border-border gap-2.5 shrink-0">
+        <img
+          src="/ms-icon-transparent.png"
+          alt="MS"
+          className="h-8 w-auto object-contain shrink-0"
+        />
+        <span className="font-black text-base tracking-tight -ml-3">
+          <span className="text-emerald-400">MS</span><span className="text-slate-900 dark:text-white">Funded</span>
         </span>
         <Badge variant="outline" className="text-[9px] px-1.5 py-0 ml-auto border-emerald-500/30 text-emerald-500">
           BETA

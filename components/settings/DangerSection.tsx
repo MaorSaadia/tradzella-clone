@@ -74,7 +74,7 @@ export function DangerSection() {
           <div>
             <p className="text-sm font-semibold">Sign out</p>
             <p className="text-xs text-muted-foreground">
-              Sign out of your TradZella account
+              Sign out of your MSFunded account
             </p>
           </div>
           <Button

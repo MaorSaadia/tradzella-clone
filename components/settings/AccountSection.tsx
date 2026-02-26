@@ -21,7 +21,7 @@ export function AccountSection({ user }: AccountSectionProps) {
           </div>
           <div>
             <CardTitle className="text-base">Account</CardTitle>
-            <CardDescription className="text-xs">Your TradZella account details</CardDescription>
+            <CardDescription className="text-xs">Your MSFunded account details</CardDescription>
           </div>
         </div>
       </CardHeader>

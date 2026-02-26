@@ -125,7 +125,7 @@ export function AlertBanner({ allTrades, accountDetails }: Props) {
       setNotifEnabled(true)
       // Fire any active danger alerts as notifications
       alerts.filter(a => a.severity === 'danger').forEach(a => {
-        new Notification('TradZella Alert', { body: a.message, icon: '/icon-192.png' })
+        new Notification('MSFunded Alert', { body: a.message, icon: '/icon-192.png' })
       })
     }
   }

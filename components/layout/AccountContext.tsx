@@ -39,13 +39,13 @@ export function AccountProvider({ children, initialAccounts }: {
   // Persist selection in localStorage
   function setSelected(account: AccountOption | null) {
     setSelectedRaw(account)
-    if (account) localStorage.setItem('tradzella_account', account.id)
-    else localStorage.removeItem('tradzella_account')
+    if (account) localStorage.setItem('msfunded_account', account.id)
+    else localStorage.removeItem('msfunded_account')
   }
 
   // Restore on mount
   useEffect(() => {
-    const saved = localStorage.getItem('tradzella_account')
+    const saved = localStorage.getItem('msfunded_account')
     if (saved) {
       const found = initialAccounts.find(a => a.id === saved)
       if (found) setSelectedRaw(found)

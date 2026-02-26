@@ -48,9 +48,9 @@ export async function requestToken(
     body: JSON.stringify({
       name: username,
       password,
-      appId: 'TradZella',
+      appId: 'MSFunded',
       appVersion: '1.0',
-      deviceId: 'tradzella-server',
+      deviceId: 'msfunded-server',
       cid,      // real numeric CID from Tradovate API settings
       sec,      // real UUID secret from Tradovate API settings
     }),

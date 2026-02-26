@@ -1,6 +1,6 @@
-// public/sw.js — Service Worker for TradZella PWA
+// public/sw.js — Service Worker for MSFunded PWA
 
-const CACHE_NAME = 'tradzella-v1'
+const CACHE_NAME = 'msfunded-v1'
 
 // Assets to cache for offline use
 const STATIC_ASSETS = [
@@ -70,11 +70,11 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   const data = event.data?.json() ?? {}
   event.waitUntil(
-    self.registration.showNotification(data.title ?? 'TradZella', {
+    self.registration.showNotification(data.title ?? 'MSFunded', {
       body: data.body ?? '',
       icon: '/icon-192.png',
       badge: '/icon-192.png',
-      tag: data.tag ?? 'tradzella',
+      tag: data.tag ?? 'msfunded',
       data: { url: data.url ?? '/dashboard' },
     })
   )

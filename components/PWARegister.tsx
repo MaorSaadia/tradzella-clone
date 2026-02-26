@@ -44,7 +44,7 @@ export function PWARegister() {
     if (outcome === 'accepted') {
       setIsInstalled(true)
       setInstallPrompt(null)
-      toast.success('TradZella installed! Find it on your home screen.')
+      toast.success('MSFunded installed! Find it on your home screen.')
     }
   }
 
@@ -60,7 +60,7 @@ export function PWARegister() {
         <div className="flex items-center gap-3">
           <Smartphone className="w-4 h-4 text-emerald-500 shrink-0" />
           <div>
-            <p className="font-semibold text-sm">Install TradZella</p>
+            <p className="font-semibold text-sm">Install MSFunded</p>
             <p className="text-xs text-muted-foreground">Add to home screen for quick access</p>
           </div>
           <Button size="sm" onClick={handleInstall}
