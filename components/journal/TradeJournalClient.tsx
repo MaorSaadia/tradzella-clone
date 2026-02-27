@@ -3,7 +3,7 @@
 
 // components/journal/TradeJournalClient.tsx
 
-import { useEffect, useState, useMemo } from 'react'
+import { Fragment, useEffect, useState, useMemo } from 'react'
 import {
   Search, ArrowUpDown,
   ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Upload
@@ -467,9 +467,8 @@ export function TradeJournalClient({
                   const isWin = pnl > 0
 
                   return (
-                    <>
+                    <Fragment key={groupKey ?? trade.id}>
                       <tr
-                        key={groupKey ?? trade.id}
                         className="border-b border-border/50 hover:bg-accent/40 transition-colors group"
                         onClick={() => {
                           if (isGrouped && groupKey) {
@@ -700,7 +699,7 @@ export function TradeJournalClient({
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })
               )}
