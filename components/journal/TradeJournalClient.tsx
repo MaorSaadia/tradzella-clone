@@ -667,7 +667,7 @@ export function TradeJournalClient({
                                     width={1200}
                                     height={700}
                                     unoptimized
-                                    className="w-full h-auto max-h-[420px] object-contain"
+                                    className="w-full h-auto max-h-105 object-contain"
                                   />
                                 </div>
                               )}
