@@ -35,7 +35,7 @@ interface ParsedTrade {
 //          buyFillId,sellFillId,qty,buyPrice,sellPrice,
 //          pnl,boughtTimestamp,soldTimestamp,duration
 function parseTradovateCSV(text: string): ParsedTrade[] {
-  const lines = text.trim().split('\n').filter(l => l.trim())
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim())
   if (lines.length < 2) throw new Error('CSV appears to be empty')
 
   const header = lines[0].toLowerCase()
@@ -52,8 +52,8 @@ function parseTradovateCSV(text: string): ParsedTrade[] {
     const line = lines[i].trim()
     if (!line) continue
 
-    // Split carefully — some fields may have commas inside
-    const cols = line.split(',')
+    // Handle quoted CSV fields (e.g. "$(1,012.50)")
+    const cols = parseCSVLine(line)
     if (cols.length < 12) continue
 
     const symbol      = cols[0]?.trim()
@@ -123,12 +123,45 @@ function parseTradovateCSV(text: string): ParsedTrade[] {
 }
 
 function parsePnl(raw: string): number {
-  // $(5.50) → -5.50
-  // $20.50  → 20.50
-  const isNegative = raw.includes('(')
-  const cleaned = raw.replace(/[$(),]/g, '').trim()
+  // Handles: $(5.50), $20.50, -$20.50, $-20.50, 1,234.56
+  if (!raw) return 0
+  const normalized = raw.trim()
+  const isNegative = normalized.includes('(') || normalized.includes('-')
+  const cleaned = normalized.replace(/[$(),\s]/g, '').replace('-', '')
   const value = parseFloat(cleaned)
+  if (!Number.isFinite(value)) return 0
   return isNegative ? -Math.abs(value) : Math.abs(value)
+}
+
+function parseCSVLine(line: string): string[] {
+  const cols: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (char === ',' && !inQuotes) {
+      cols.push(current.trim())
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  cols.push(current.trim())
+  return cols
 }
 
 function parseTimestamp(ts: string): number {
@@ -328,7 +361,10 @@ export function CSVImportClient() {
         <div className="space-y-4">
           {/* Fees input + summary cards */}
           {(() => {
-            const reportedPnl = trades.reduce((s, t) => s + t.pnl, 0)
+            const reportedPnl = trades.reduce(
+              (sum, trade) => sum + (Number.isFinite(trade.pnl) ? trade.pnl : 0),
+              0
+            )
             const feesNum    = parseFloat(totalFees) || 0
             const totalPnl    = reportedPnl - feesNum
             const summaryCards = [
