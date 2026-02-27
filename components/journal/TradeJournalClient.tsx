@@ -6,8 +6,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import {
   Search, ArrowUpDown,
-  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp
+  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Upload
 } from 'lucide-react'
+import NextImage from 'next/image'
+import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -59,6 +61,7 @@ export function TradeJournalClient({
   const [page, setPage] = useState(1)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [selectedGroupTradeIds, setSelectedGroupTradeIds] = useState<string[]>([])
+  const [draggingGroupKey, setDraggingGroupKey] = useState<string | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [localTrades, setLocalTrades] = useState<Trade[]>(trades)
 
@@ -207,6 +210,88 @@ export function TradeJournalClient({
 
   function toggleGroupExpand(key: string) {
     setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  async function convertImageToDataUrl(file: File): Promise<string> {
+    const objectUrl = URL.createObjectURL(file)
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new window.Image()
+        image.onload = () => resolve(image)
+        image.onerror = () => reject(new Error('Failed to read image'))
+        image.src = objectUrl
+      })
+
+      const MAX_DIMENSION = 1600
+      const ratio = Math.min(MAX_DIMENSION / img.width, MAX_DIMENSION / img.height, 1)
+      const width = Math.max(1, Math.round(img.width * ratio))
+      const height = Math.max(1, Math.round(img.height * ratio))
+
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('Failed to prepare image canvas')
+      ctx.drawImage(img, 0, 0, width, height)
+      return canvas.toDataURL('image/jpeg', 0.82)
+    } finally {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }
+
+  async function processScreenshotFile(file: File): Promise<string | null> {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file')
+      return null
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image is too large. Max size is 10MB')
+      return null
+    }
+    try {
+      return await convertImageToDataUrl(file)
+    } catch {
+      toast.error('Failed to process screenshot')
+      return null
+    }
+  }
+
+  async function saveScreenshotForGroup(groupTradeIds: string[], screenshot: string | null) {
+    setLocalTrades(prev => prev.map(t => (
+      groupTradeIds.includes(t.id) ? { ...t, screenshot } : t
+    )))
+
+    const results = await Promise.allSettled(
+      groupTradeIds.map(async id => {
+        const res = await fetch(`/api/trades/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshot }),
+        })
+        if (!res.ok) throw new Error('Failed')
+      })
+    )
+
+    if (results.some(r => r.status === 'rejected')) {
+      toast.error('Failed to save screenshot')
+    } else {
+      toast.success('Screenshot saved')
+    }
+  }
+
+  async function handleDropScreenshot(
+    e: React.DragEvent<HTMLDivElement>,
+    groupKey: string,
+    groupTradeIds: string[]
+  ) {
+    e.preventDefault()
+    e.stopPropagation()
+    setDraggingGroupKey(null)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    const dataUrl = await processScreenshotFile(file)
+    if (!dataUrl) return
+    await saveScreenshotForGroup(groupTradeIds, dataUrl)
   }
 
   const activeFilters = [
@@ -370,6 +455,14 @@ export function TradeJournalClient({
                   const emotion = isGrouped ? (item as ConsolidatedTrade).emotion : trade.emotion
                   const groupKey = isGrouped ? (item as ConsolidatedTrade).key : null
                   const partials = isGrouped ? (item as ConsolidatedTrade).partials : []
+                  const groupTradeIds = partials.map(p => p.id)
+                  const groupScreenshot = isGrouped
+                    ? (
+                        groupTradeIds
+                          .map(id => localTrades.find(t => t.id === id)?.screenshot)
+                          .find((s): s is string => !!s) ?? trade.screenshot ?? ''
+                      )
+                    : (trade.screenshot ?? '')
                   const isExpanded = groupKey ? !!expandedGroups[groupKey] : false
                   const isWin = pnl > 0
 
@@ -499,11 +592,94 @@ export function TradeJournalClient({
                       {isGrouped && isExpanded && partials.length > 0 && (
                         <tr className="border-b border-border/50 bg-accent/20">
                           <td colSpan={10} className="px-4 py-3">
-                            <div className="space-y-1.5">
+                            <div
+                              className={cn(
+                                'space-y-1.5 rounded-lg p-1.5 transition-colors',
+                                draggingGroupKey === groupKey ? 'bg-emerald-500/10 ring-1 ring-emerald-500/40' : ''
+                              )}
+                              onDragEnter={e => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                if (groupKey) setDraggingGroupKey(groupKey)
+                              }}
+                              onDragOver={e => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                              }}
+                              onDragLeave={e => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                if (groupKey && draggingGroupKey === groupKey) setDraggingGroupKey(null)
+                              }}
+                              onDrop={e => {
+                                if (!groupKey) return
+                                void handleDropScreenshot(e, groupKey, groupTradeIds)
+                              }}
+                            >
+                              <div className="flex items-center justify-end gap-2">
+                                <label className="inline-flex">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async e => {
+                                      const file = e.target.files?.[0]
+                                      if (!file) return
+                                      const dataUrl = await processScreenshotFile(file)
+                                      if (!dataUrl) return
+                                      await saveScreenshotForGroup(groupTradeIds, dataUrl)
+                                      e.target.value = ''
+                                    }}
+                                  />
+                                  <span className="inline-flex items-center gap-1 h-6 px-2.5 rounded-md border border-border text-[10px] font-semibold cursor-pointer hover:bg-accent">
+                                    <Upload className="w-3 h-3" />
+                                    {groupScreenshot ? 'Replace image' : 'Add image'}
+                                  </span>
+                                </label>
+                                <span className="text-[10px] text-muted-foreground">or drag and drop</span>
+                                {groupScreenshot && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 text-[10px] text-red-500 border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
+                                    onClick={() => saveScreenshotForGroup(groupTradeIds, null)}
+                                  >
+                                    Remove image
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 text-[10px]"
+                                  onClick={() => {
+                                    setSelectedGroupTradeIds(groupTradeIds)
+                                    setSelectedTrade(trade)
+                                  }}
+                                >
+                                  Open note
+                                </Button>
+                              </div>
+                              {groupScreenshot && (
+                                <div className="rounded-lg border border-border bg-black/10 p-1.5 max-w-4xl mx-auto">
+                                  <NextImage
+                                    src={groupScreenshot}
+                                    alt="Trade screenshot"
+                                    width={1200}
+                                    height={700}
+                                    unoptimized
+                                    className="w-full h-auto max-h-[420px] object-contain"
+                                  />
+                                </div>
+                              )}
+                              {!groupScreenshot && (
+                                <div className="rounded-lg border border-dashed border-border/70 bg-background/40 px-3 py-7 text-center text-xs text-muted-foreground">
+                                  Drop image here to upload
+                                </div>
+                              )}
                               {partials.map((partial, index) => (
                                 <div
                                   key={partial.id}
-                                  className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center text-xs px-2 py-1.5 rounded border border-border/50"
+                                  className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center text-xs px-2 py-1.5 rounded border border-border/50"
                                 >
                                   <span className="text-muted-foreground">
                                     Partial {index + 1} - {formatDateTime(partial.exitTime)}
@@ -518,17 +694,6 @@ export function TradeJournalClient({
                                   )}>
                                     {formatCurrency(partial.pnl)}
                                   </span>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-6 text-[10px]"
-                                    onClick={() => {
-                                      setSelectedGroupTradeIds(partials.map(p => p.id))
-                                      setSelectedTrade(trade)
-                                    }}
-                                  >
-                                    Open note
-                                  </Button>
                                 </div>
                               ))}
                             </div>
