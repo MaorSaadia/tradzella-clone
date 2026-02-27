@@ -19,6 +19,7 @@ import {
 import { TradeNoteModal } from './TradeNoteModal'
 import { cn, formatCurrency, formatDateTime, calcStats, getTradeTotalPnl } from '@/lib/utils'
 import type { Trade } from '@/lib/db/schema'
+import { consolidateTrades, type ConsolidatedTrade } from '@/lib/consolidateTrades'
 
 const PAGE_SIZE = 20
 
@@ -38,44 +39,26 @@ const EMOTION_ICONS: Record<string, string> = {
   confident: '💪', anxious: '😟', neutral: '😐',
 }
 
-interface Props { trades: Trade[] }
-
-type PartialTrade = {
-  id: string
-  qty: number
-  exitPrice: number
-  exitTime: Date | string
-  pnl: number
+interface Props {
+  trades: Trade[]
+  consolidatePartials: boolean
+  onConsolidatePartialsChange: (value: boolean) => void
 }
 
-type ConsolidatedTrade = {
-  key: string
-  representative: Trade
-  symbol: string
-  side: Trade['side']
-  entryPrice: number
-  entryTime: Date | string
-  avgExitPrice: number
-  exitTime: Date | string
-  qty: number
-  pnl: number
-  tags: string[]
-  notes: string
-  grade: Trade['grade']
-  emotion: Trade['emotion']
-  partials: PartialTrade[]
-}
-
-export function TradeJournalClient({ trades }: Props) {
+export function TradeJournalClient({
+  trades,
+  consolidatePartials,
+  onConsolidatePartialsChange,
+}: Props) {
   const [search, setSearch] = useState('')
   const [sideFilter, setSideFilter] = useState<'all' | 'long' | 'short'>('all')
   const [resultFilter, setResultFilter] = useState<'all' | 'win' | 'loss'>('all')
   const [symbolFilter, setSymbolFilter] = useState('all')
-  const [consolidatePartials, setConsolidatePartials] = useState(true)
   const [sortKey, setSortKey] = useState<SortKey>('exitTime')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
+  const [selectedGroupTradeIds, setSelectedGroupTradeIds] = useState<string[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [localTrades, setLocalTrades] = useState<Trade[]>(trades)
 
@@ -83,81 +66,15 @@ export function TradeJournalClient({ trades }: Props) {
     setLocalTrades(trades)
   }, [trades])
 
-  const consolidatedTrades = useMemo<ConsolidatedTrade[]>(() => {
-    const groups = new Map<string, Trade[]>()
-    for (const trade of localTrades) {
-      const key = [
-        trade.symbol,
-        trade.side,
-        Number(trade.entryPrice).toFixed(4),
-        new Date(trade.entryTime).getTime().toString(),
-      ].join('|')
-      const existing = groups.get(key)
-      if (existing) existing.push(trade)
-      else groups.set(key, [trade])
-    }
+  useEffect(() => {
+    setExpandedGroups({})
+    setPage(1)
+  }, [consolidatePartials])
 
-    return Array.from(groups.entries()).map(([key, groupedTrades]) => {
-      const ordered = [...groupedTrades].sort(
-        (a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime()
-      )
-
-      const representative =
-        ordered.find(t => (t.notes?.trim()?.length ?? 0) > 0) ??
-        ordered.find(t => (t.tags?.length ?? 0) > 0) ??
-        ordered[0]
-
-      const qty = ordered.reduce((sum, t) => sum + t.qty, 0)
-      const weightedExit = ordered.reduce((sum, t) => sum + Number(t.exitPrice) * t.qty, 0)
-      const pnl = ordered.reduce((sum, t) => sum + getTradeTotalPnl(t), 0)
-      const latestExit = ordered[ordered.length - 1]?.exitTime ?? representative.exitTime
-
-      const tags = Array.from(
-        new Set(ordered.flatMap(t => t.tags ?? []))
-      )
-
-      const notes = ordered
-        .map(t => t.notes?.trim())
-        .filter((n): n is string => !!n)
-        .join(' | ')
-
-      const grade =
-        ordered.find(t => !!t.grade)?.grade ??
-        representative.grade ??
-        null
-
-      const emotion =
-        ordered.find(t => !!t.emotion)?.emotion ??
-        representative.emotion ??
-        null
-
-      const partials: PartialTrade[] = ordered.map(t => ({
-        id: t.id,
-        qty: t.qty,
-        exitPrice: Number(t.exitPrice),
-        exitTime: t.exitTime,
-        pnl: getTradeTotalPnl(t),
-      }))
-
-      return {
-        key,
-        representative,
-        symbol: representative.symbol,
-        side: representative.side,
-        entryPrice: Number(representative.entryPrice),
-        entryTime: representative.entryTime,
-        avgExitPrice: qty > 0 ? weightedExit / qty : Number(representative.exitPrice),
-        exitTime: latestExit,
-        qty,
-        pnl,
-        tags,
-        notes,
-        grade,
-        emotion,
-        partials,
-      }
-    })
-  }, [localTrades])
+  const consolidatedTrades = useMemo<ConsolidatedTrade[]>(
+    () => consolidateTrades(localTrades),
+    [localTrades]
+  )
 
   // Unique symbols for filter dropdown
   const symbols = useMemo(() =>
@@ -248,8 +165,43 @@ export function TradeJournalClient({ trades }: Props) {
   }
 
   // Called after saving note in modal — update local state instantly
-  function handleTradeUpdated(updated: Trade) {
-    setLocalTrades(prev => prev.map(t => t.id === updated.id ? updated : t))
+  async function handleTradeUpdated(updated: Trade) {
+    const idsToSync = selectedGroupTradeIds.length > 0
+      ? selectedGroupTradeIds
+      : [updated.id]
+
+    setLocalTrades(prev => prev.map(t => (
+      idsToSync.includes(t.id)
+        ? {
+            ...t,
+            notes: updated.notes,
+            tags: updated.tags,
+            grade: updated.grade,
+            emotion: updated.emotion,
+            screenshot: updated.screenshot,
+          }
+        : t
+    )))
+
+    const payload = {
+      notes: updated.notes ?? '',
+      tags: updated.tags ?? [],
+      grade: updated.grade ?? null,
+      emotion: updated.emotion ?? null,
+      screenshot: updated.screenshot ?? null,
+    }
+
+    const otherIds = idsToSync.filter(id => id !== updated.id)
+    if (otherIds.length > 0) {
+      await Promise.allSettled(
+        otherIds.map(id => fetch(`/api/trades/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }))
+      )
+    }
+
     setSelectedTrade(updated)
   }
 
@@ -323,14 +275,7 @@ export function TradeJournalClient({ trades }: Props) {
 
         {/* Consolidate partials */}
         <div className="flex items-center gap-2 rounded-lg border border-border px-3 h-9">
-          <Switch
-            checked={consolidatePartials}
-            onCheckedChange={checked => {
-              setConsolidatePartials(checked)
-              setExpandedGroups({})
-              setPage(1)
-            }}
-          />
+          <Switch checked={consolidatePartials} onCheckedChange={onConsolidatePartialsChange} />
           <span className="text-xs font-semibold">Consolidate partials</span>
         </div>
 
@@ -434,8 +379,9 @@ export function TradeJournalClient({ trades }: Props) {
                         key={groupKey ?? trade.id}
                         className="border-b border-border/50 hover:bg-accent/40 transition-colors group"
                         onClick={() => {
-                          if (isGrouped && groupKey) toggleGroupExpand(groupKey)
-                          else setSelectedTrade(trade)
+                          if (isGrouped && groupKey) {
+                            toggleGroupExpand(groupKey)
+                          }
                         }}
                       >
                         {/* Date */}
@@ -577,8 +523,8 @@ export function TradeJournalClient({ trades }: Props) {
                                     variant="outline"
                                     className="h-6 text-[10px]"
                                     onClick={() => {
-                                      const partialTrade = localTrades.find(t => t.id === partial.id)
-                                      if (partialTrade) setSelectedTrade(partialTrade)
+                                      setSelectedGroupTradeIds(partials.map(p => p.id))
+                                      setSelectedTrade(trade)
                                     }}
                                   >
                                     Open note
@@ -637,7 +583,10 @@ export function TradeJournalClient({ trades }: Props) {
       {/* Note modal */}
       <TradeNoteModal
         trade={selectedTrade}
-        onClose={() => setSelectedTrade(null)}
+        onClose={() => {
+          setSelectedTrade(null)
+          setSelectedGroupTradeIds([])
+        }}
         onSaved={handleTradeUpdated}
       />
     </>

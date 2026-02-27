@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params
     const body = await req.json()
     const {
-      notes, tags, grade, emotion,
+      notes, tags, grade, emotion, screenshot,
       playbookId, isMistake,
       propFirmAccountId,
     } = body
@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(tags !== undefined && { tags }),
         ...(grade !== undefined && { grade }),
         ...(emotion !== undefined && { emotion }),
+        ...(screenshot !== undefined && { screenshot }),
         ...(playbookId !== undefined && { playbookId: playbookId || null }),
         ...(isMistake !== undefined && { isMistake }),
         ...(propFirmAccountId !== undefined && { propFirmAccountId: propFirmAccountId || null }),

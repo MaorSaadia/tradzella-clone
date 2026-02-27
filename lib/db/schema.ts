@@ -167,6 +167,7 @@ export const trades = pgTable('trades', {
   exitTime: timestamp('exit_time').notNull(),
   tags: json('tags').$type<string[]>().default([]),
   notes: text('notes').default(''),
+  screenshot: text('screenshot'),
   grade: gradeEnum('grade'),
   emotion: emotionEnum('emotion'),
   isMistake: boolean('is_mistake').default(false),

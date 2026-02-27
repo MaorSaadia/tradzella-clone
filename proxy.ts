@@ -1,4 +1,4 @@
-// middleware.ts  (project root — NOT inside app/)
+// proxy.ts (project root, not inside app/)
 
 import { auth } from '@/lib/auth'
 import { NextResponse } from 'next/server'

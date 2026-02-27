@@ -6,6 +6,7 @@ import { db } from '@/lib/db'
 import { tradovateAccounts } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { TradovateSection } from '@/components/settings/TradovateSection'
+import { JournalSection } from '@/components/settings/JournalSection'
 import { AccountSection } from '@/components/settings/AccountSection'
 import { DangerSection } from '@/components/settings/DangerSection'
 
@@ -28,6 +29,9 @@ export default async function SettingsPage() {
 
       {/* Tradovate connection */}
       <TradovateSection account={account ?? null} />
+
+      {/* Journal preferences */}
+      <JournalSection />
 
       {/* Account info */}
       <AccountSection user={session.user} />

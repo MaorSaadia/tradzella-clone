@@ -3,7 +3,7 @@
 
 // components/analytics/AnalyticsClient.tsx
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTheme } from 'next-themes'
 import {
   BarChart, Bar, XAxis, YAxis,
@@ -17,6 +17,8 @@ import { TradingCalendar } from './TradingCalendar'
 import { calcStats, formatCurrency, formatDate, getTradeTotalPnl } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { Trade } from '@/lib/db/schema'
+import { consolidateTradesAsTrades } from '@/lib/consolidateTrades'
+import { useJournalConsolidatePartials } from '@/lib/useJournalConsolidatePartials'
 
 interface Props { trades: Trade[] }
 
@@ -35,7 +37,7 @@ function ChartTooltip({ active, payload, label, formatter }: any) {
 }
 
 export function AnalyticsClient({ trades }: Props) {
-  const [consolidatePartials, setConsolidatePartials] = useState(true)
+  const { consolidatePartials, updateConsolidatePartials } = useJournalConsolidatePartials()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const gridColor = isDark ? '#1e293b' : '#f1f5f9'
@@ -43,50 +45,7 @@ export function AnalyticsClient({ trades }: Props) {
 
   const displayTrades = useMemo(() => {
     if (!consolidatePartials) return trades
-
-    const groups = new Map<string, Trade[]>()
-    for (const trade of trades) {
-      const key = [
-        trade.symbol,
-        trade.side,
-        Number(trade.entryPrice).toFixed(4),
-        new Date(trade.entryTime).getTime().toString(),
-      ].join('|')
-      const existing = groups.get(key)
-      if (existing) existing.push(trade)
-      else groups.set(key, [trade])
-    }
-
-    return Array.from(groups.values()).map(group => {
-      const ordered = [...group].sort(
-        (a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime()
-      )
-      const representative =
-        ordered.find(t => (t.notes?.trim()?.length ?? 0) > 0) ??
-        ordered.find(t => (t.tags?.length ?? 0) > 0) ??
-        ordered[0]
-      const qty = ordered.reduce((sum, t) => sum + t.qty, 0)
-      const weightedExit = ordered.reduce((sum, t) => sum + Number(t.exitPrice) * t.qty, 0)
-      const pnl = ordered.reduce((sum, t) => sum + getTradeTotalPnl(t), 0)
-      const latestExit = ordered[ordered.length - 1]?.exitTime ?? representative.exitTime
-      const tags = Array.from(new Set(ordered.flatMap(t => t.tags ?? [])))
-      const notes = ordered
-        .map(t => t.notes?.trim())
-        .filter((n): n is string => !!n)
-        .join(' | ')
-
-      return {
-        ...representative,
-        tradovateTradeId: `consolidated-${representative.id}`,
-        qty,
-        pnl: pnl.toFixed(2),
-        commission: '0',
-        exitPrice: (qty > 0 ? weightedExit / qty : Number(representative.exitPrice)).toFixed(4),
-        exitTime: latestExit,
-        tags,
-        notes,
-      }
-    })
+    return consolidateTradesAsTrades(trades)
   }, [trades, consolidatePartials])
 
   const stats = useMemo(() => calcStats(displayTrades as any), [displayTrades])
@@ -196,7 +155,7 @@ export function AnalyticsClient({ trades }: Props) {
         </TabsList>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 rounded-lg border border-border px-3 h-9">
-            <Switch checked={consolidatePartials} onCheckedChange={setConsolidatePartials} />
+            <Switch checked={consolidatePartials} onCheckedChange={updateConsolidatePartials} />
             <span className="text-xs font-semibold">Consolidate partials</span>
           </div>
           <span className="text-xs text-muted-foreground">

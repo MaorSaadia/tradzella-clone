@@ -2,9 +2,10 @@
 
 // components/journal/TradeNoteModal.tsx
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import NextImage from 'next/image'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Upload, Trash2 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog'
@@ -51,7 +52,94 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
   const [emotion, setEmotion] = useState<string>('')
   const [tags, setTags] = useState<string[]>([])
   const [notes, setNotes] = useState('')
+  const [screenshot, setScreenshot] = useState('')
+  const [isDraggingScreenshot, setIsDraggingScreenshot] = useState(false)
   const [saving, setSaving] = useState(false)
+  const dragDepth = useRef(0)
+
+  async function convertImageToDataUrl(file: File): Promise<string> {
+    const objectUrl = URL.createObjectURL(file)
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new window.Image()
+        image.onload = () => resolve(image)
+        image.onerror = () => reject(new Error('Failed to read image'))
+        image.src = objectUrl
+      })
+
+      const MAX_DIMENSION = 1600
+      const ratio = Math.min(MAX_DIMENSION / img.width, MAX_DIMENSION / img.height, 1)
+      const width = Math.max(1, Math.round(img.width * ratio))
+      const height = Math.max(1, Math.round(img.height * ratio))
+
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('Failed to prepare image canvas')
+      ctx.drawImage(img, 0, 0, width, height)
+
+      return canvas.toDataURL('image/jpeg', 0.82)
+    } finally {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }
+
+  async function handleScreenshotChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    await processScreenshotFile(file)
+    event.target.value = ''
+  }
+
+  async function processScreenshotFile(file: File) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image is too large. Max size is 10MB')
+      return
+    }
+
+    try {
+      const dataUrl = await convertImageToDataUrl(file)
+      setScreenshot(dataUrl)
+    } catch {
+      toast.error('Failed to process screenshot')
+    }
+  }
+
+  function onScreenshotDragEnter(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepth.current += 1
+    setIsDraggingScreenshot(true)
+  }
+
+  function onScreenshotDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  function onScreenshotDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setIsDraggingScreenshot(false)
+  }
+
+  async function onScreenshotDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepth.current = 0
+    setIsDraggingScreenshot(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    await processScreenshotFile(file)
+  }
 
   // Populate fields when trade changes
   useEffect(() => {
@@ -60,6 +148,7 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
       setEmotion(trade.emotion ?? '')
       setTags(trade.tags ?? [])
       setNotes(trade.notes ?? '')
+      setScreenshot(trade.screenshot ?? '')
     }
   }, [trade])
 
@@ -81,6 +170,7 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
           emotion: emotion || null,
           tags,
           notes,
+          screenshot: screenshot || null,
         }),
       })
 
@@ -107,7 +197,7 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
 
   return (
     <Dialog open={!!trade} onOpenChange={open => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             {/* Trade summary in header */}
@@ -229,6 +319,72 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
             onChange={e => setNotes(e.target.value)}
             className="min-h-24 text-sm resize-none"
           />
+        </div>
+
+        {/* Screenshot */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Trade Screenshot
+          </p>
+          <div
+            className={cn(
+              'space-y-3 rounded-xl border-2 border-dashed p-3 transition-colors',
+              isDraggingScreenshot
+                ? 'border-emerald-500 bg-emerald-500/10'
+                : 'border-border/70 bg-muted/20'
+            )}
+            onDragEnter={onScreenshotDragEnter}
+            onDragOver={onScreenshotDragOver}
+            onDragLeave={onScreenshotDragLeave}
+            onDrop={onScreenshotDrop}
+          >
+            <div className="flex gap-2">
+              <label className="inline-flex">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleScreenshotChange}
+                />
+                <span className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-xs font-semibold cursor-pointer hover:bg-accent">
+                  <Upload className="w-3.5 h-3.5" />
+                  {screenshot ? 'Replace screenshot' : 'Upload screenshot'}
+                </span>
+              </label>
+              <span className="text-xs text-muted-foreground self-center">
+                or drag and drop
+              </span>
+              {screenshot && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 text-xs text-red-500 border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
+                  onClick={() => setScreenshot('')}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                  Remove
+                </Button>
+              )}
+            </div>
+            {screenshot && (
+              <div className="rounded-lg border border-border overflow-hidden max-h-[520px] min-h-[260px] bg-black/10">
+                <NextImage
+                  src={screenshot}
+                  alt="Trade screenshot"
+                  width={1200}
+                  height={700}
+                  unoptimized
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            )}
+            {!screenshot && (
+              <div className="rounded-lg border border-border/60 bg-background/40 px-3 py-8 text-center text-xs text-muted-foreground">
+                Drop an image here or click Upload screenshot
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Actions */}
