@@ -8,13 +8,13 @@ import { useRouter } from 'next/navigation'
 import {
   Plus, BookOpen, 
   Target, AlertTriangle, BarChart3, 
-   Trophy
+  Trophy
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn, formatCurrency, getTradeTotalPnl } from '@/lib/utils'
+import { cn, formatCurrency , getTradeTotalPnl, } from '@/lib/utils'
 import { PlaybookModal } from './PlaybookModal'
 import { PlaybookDetailPanel } from './PlaybookDetailPanel'
 import { MistakeTracker } from './MistakeTracker'
@@ -50,7 +50,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
   const playbookStats = useMemo(() => {
     return playbooks.map(pb => {
       const pbTrades = allTrades.filter(t => t.playbookId === pb.id)
-      const pnls = pbTrades.map(getTradeTotalPnl)
+      const pnls = pbTrades.map(t => getTradeTotalPnl(t))
       const wins = pnls.filter(p => p > 0)
       const losses = pnls.filter(p => p < 0)
       const netPnl = pnls.reduce((s, p) => s + p, 0)
@@ -131,7 +131,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
               <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mb-4 text-2xl">📋</div>
               <h2 className="text-lg font-black mb-2">No strategies yet</h2>
               <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                Define your trading setups — VWAP Reclaim, Opening Range Breakout, Reversal — then link trades to see which ones actually work.
+                Define your ICT setups — MSS, CISD, Silver Bullet, Breaker Block, FVG — then link trades to see which concepts actually perform for you.
               </p>
               <Button onClick={() => setModalOpen(true)}
                 className="bg-emerald-500 hover:bg-emerald-600 text-black font-bold">
@@ -192,7 +192,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border">
-                          {['Strategy', 'Trades', 'Win Rate', 'Total P/L', 'Avg Win', 'Avg Loss', 'R:R'].map(h => (
+                          {['Strategy', 'Trades', 'Win Rate', 'Net P&L', 'Avg Win', 'Avg Loss', 'R:R'].map(h => (
                             <th key={h} className="text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                           ))}
                         </tr>
@@ -243,7 +243,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
               {/* Visual bars */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
-                  <CardHeader className="pb-3"><CardTitle className="text-sm">Total P/L by Strategy</CardTitle></CardHeader>
+                  <CardHeader className="pb-3"><CardTitle className="text-sm">Net P&L by Strategy</CardTitle></CardHeader>
                   <CardContent className="space-y-3">
                     {playbookStats.map(pb => {
                       const maxPnl = Math.max(...playbookStats.map(p => Math.abs(p.netPnl)))
