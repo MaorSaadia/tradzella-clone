@@ -16,6 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { useConfirm } from '@/components/layout/ConfirmDialogProvider'
 import { cn } from '@/lib/utils'
 import { useAccount } from '@/components/layout/AccountContext'
 
@@ -360,6 +361,7 @@ export function WeeklyReviewClient({
   initialSavedReviews?: SavedReview[]
   propFirmAccountId?: string | null
 }) {
+  const confirmAction = useConfirm()
   // Read the currently-selected prop firm account from global context
   // This is reactive — re-renders immediately when user switches account
   const { selected, accounts } = useAccount()
@@ -454,7 +456,12 @@ export function WeeklyReviewClient({
   }
 
   async function deleteReview(id: string) {
-    if (!confirm('Delete this review permanently?')) return
+    const confirmed = await confirmAction({
+      title: 'Delete this review?',
+      description: 'This review will be permanently removed from history.',
+      confirmText: 'Delete Review',
+    })
+    if (!confirmed) return
     try {
       const res = await fetch(`/api/review/saved/${id}`, { method: 'DELETE' })
       if (!res.ok) {

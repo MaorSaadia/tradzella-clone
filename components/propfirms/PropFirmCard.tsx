@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
+import { useConfirm } from '@/components/layout/ConfirmDialogProvider'
 import { cn, formatCurrency, calcTrailingDrawdown, getTradeTotalPnl } from '@/lib/utils'
 import type { PropFirm, PropFirmAccount, Trade } from '@/lib/db/schema'
 
@@ -98,13 +99,19 @@ function calcProgress(account: PropFirmAccount, trades: Trade[]) {
 }
 
 export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props) {
+  const confirmAction = useConfirm()
   const [expanded, setExpanded] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const color = firm.logoColor ?? FIRM_COLORS[0]
 
   async function handleDeleteAccount(accountId: string) {
-    if (!confirm('Delete this account? Linked trades will be unlinked.')) return
+    const confirmed = await confirmAction({
+      title: 'Delete this account?',
+      description: 'Linked trades will stay in your journal but be unlinked from this account.',
+      confirmText: 'Delete Account',
+    })
+    if (!confirmed) return
     setDeletingId(accountId)
     try {
       const res = await fetch(`/api/propfirms/accounts/${accountId}`, { method: 'DELETE' })
@@ -127,7 +134,12 @@ export function PropFirmCard({ firm, allTrades, onAddAccount, onRefresh }: Props
   }
 
   async function handleDeleteFirm() {
-    if (!confirm(`Delete ${firm.name} and all its accounts?`)) return
+    const confirmed = await confirmAction({
+      title: `Delete ${firm.name}?`,
+      description: 'All accounts under this firm will also be deleted.',
+      confirmText: 'Delete Firm',
+    })
+    if (!confirmed) return
     const res = await fetch(`/api/propfirms/${firm.id}`, { method: 'DELETE' })
     if (!res.ok) { toast.error('Failed to delete firm'); return }
     toast.success('Firm deleted')

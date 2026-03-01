@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { X, Edit2, Trash2, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { useConfirm } from '@/components/layout/ConfirmDialogProvider'
 import { PlaybookModal } from './PlaybookModal'
 import { cn, formatCurrency, getTradeTotalPnl } from '@/lib/utils'
 import type { Playbook, Trade } from '@/lib/db/schema'
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function PlaybookDetailPanel({ playbook, trades, onClose, onRefresh }: Props) {
+  const confirmAction = useConfirm()
   const [editOpen, setEditOpen] = useState(false)
 
   const pnls = trades.map(getTradeTotalPnl)
@@ -30,7 +32,12 @@ export function PlaybookDetailPanel({ playbook, trades, onClose, onRefresh }: Pr
   const avgLoss = losses.length ? Math.abs(losses.reduce((s, p) => s + p, 0) / losses.length) : 0
 
   async function handleDelete() {
-    if (!confirm(`Delete "${playbook.name}"? Trades will be unlinked.`)) return
+    const confirmed = await confirmAction({
+      title: `Delete "${playbook.name}"?`,
+      description: 'All linked trades will be unlinked from this strategy.',
+      confirmText: 'Delete Strategy',
+    })
+    if (!confirmed) return
     const res = await fetch(`/api/playbooks/${playbook.id}`, { method: 'DELETE' })
     if (!res.ok) { toast.error('Failed to delete'); return }
     toast.success('Strategy deleted')

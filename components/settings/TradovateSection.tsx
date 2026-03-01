@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { ConnectModal } from '@/components/tradovate/ConnectModal'
+import { useConfirm } from '@/components/layout/ConfirmDialogProvider'
 import { formatDateTime } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { TradovateAccount } from '@/lib/db/schema'
@@ -27,6 +28,7 @@ interface TradovateSectionProps {
 }
 
 export function TradovateSection({ account }: TradovateSectionProps) {
+  const confirmAction = useConfirm()
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -53,7 +55,12 @@ export function TradovateSection({ account }: TradovateSectionProps) {
   }
 
   async function handleDisconnect() {
-    if (!confirm('Disconnect Tradovate? Your existing trades will be kept.')) return
+    const confirmed = await confirmAction({
+      title: 'Disconnect Tradovate?',
+      description: 'Your existing trades will be kept, but syncing will stop.',
+      confirmText: 'Disconnect',
+    })
+    if (!confirmed) return
     setDisconnecting(true)
     try {
       const res = await fetch('/api/tradovate/disconnect', { method: 'DELETE' })

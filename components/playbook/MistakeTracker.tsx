@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { useConfirm } from '@/components/layout/ConfirmDialogProvider'
 import { cn, formatCurrency, getTradeTotalPnl } from '@/lib/utils'
 import type { Trade, TradeMistake } from '@/lib/db/schema'
 
@@ -152,6 +153,7 @@ function LogMistakeModal({ open, onOpenChange, allTrades, onSaved }: LogMistakeM
 }
 
 export function MistakeTracker({ allTrades, allMistakes, mistakeSummary, totalPnlLoss, onRefresh }: Props) {
+  const confirmAction = useConfirm()
   const [logOpen, setLogOpen] = useState(false)
   const [deletingMistakeId, setDeletingMistakeId] = useState<string | null>(null)
 
@@ -169,7 +171,12 @@ export function MistakeTracker({ allTrades, allMistakes, mistakeSummary, totalPn
   const mistakeWinRate = mistakeTrades.length ? (mistakeWins.length / mistakeTrades.length) * 100 : 0
 
   async function handleDeleteMistake(mistakeId: string) {
-    if (!confirm('Delete this mistake log?')) return
+    const confirmed = await confirmAction({
+      title: 'Delete this mistake log?',
+      description: 'This will permanently remove the mistake entry.',
+      confirmText: 'Delete',
+    })
+    if (!confirmed) return
     setDeletingMistakeId(mistakeId)
     try {
       const res = await fetch('/api/mistakes', {

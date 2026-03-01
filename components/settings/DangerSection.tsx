@@ -10,13 +10,20 @@ import { Trash2, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { useConfirm } from '@/components/layout/ConfirmDialogProvider'
 
 export function DangerSection() {
+  const confirmAction = useConfirm()
   const router = useRouter()
   const [deletingTrades, setDeletingTrades] = useState(false)
 
   async function handleDeleteTrades() {
-    if (!confirm('Delete ALL your trades? This cannot be undone.')) return
+    const confirmed = await confirmAction({
+      title: 'Delete all trades?',
+      description: 'This will permanently remove every trade from your journal and cannot be undone.',
+      confirmText: 'Delete All',
+    })
+    if (!confirmed) return
     setDeletingTrades(true)
     try {
       const res = await fetch('/api/trades/all', { method: 'DELETE' })

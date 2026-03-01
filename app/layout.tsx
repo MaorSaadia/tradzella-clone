@@ -6,6 +6,7 @@ import './globals.css'
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from '@/components/ui/sonner'
 import { PWARegister } from '@/components/PWARegister'
+import { ConfirmDialogProvider } from '@/components/layout/ConfirmDialogProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -43,9 +44,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          {children}
-          <Toaster richColors position="bottom-right" />
-          <PWARegister />
+          <ConfirmDialogProvider>
+            {children}
+            <Toaster richColors position="bottom-right" />
+            <PWARegister />
+          </ConfirmDialogProvider>
         </ThemeProvider>
       </body>
     </html>
