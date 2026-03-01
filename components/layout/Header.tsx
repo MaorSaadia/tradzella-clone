@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ThemeToggle } from './ThemeToggle'
 import { AccountSwitcher } from './AccountSwitcher'
+import { useAccount } from './AccountContext'
+import { cn } from '@/lib/utils'
 
 interface HeaderProps {
   user: { name?: string | null; email?: string | null }
@@ -22,6 +24,7 @@ interface HeaderProps {
 
 export function Header({ user }: HeaderProps) {
   const router = useRouter()
+  const { selected } = useAccount()
   const [syncing, setSyncing] = useState(false)
 
   const initials = user.name
@@ -44,6 +47,19 @@ export function Header({ user }: HeaderProps) {
 
       {/* Account switcher — left side after logo */}
       <AccountSwitcher />
+
+      {/* Selected account balance */}
+      {selected && (
+        <div className="hidden md:flex flex-col justify-center rounded-lg border border-border bg-muted/30 px-3 py-1.5 min-w-38">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Account Balance</span>
+          <span className={cn(
+            'text-sm font-black tabular-nums',
+            selected.currentBalance >= selected.accountSize ? 'text-emerald-500' : 'text-red-500'
+          )}>
+            ${selected.currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      )}
 
       {/* Spacer */}
       <div className="flex-1" />

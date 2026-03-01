@@ -13,6 +13,7 @@ export interface AccountOption {
   status: string
   stage: string
   accountSize: number
+  currentBalance: number
 }
 
 interface AccountContextValue {

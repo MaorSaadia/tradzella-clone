@@ -11,6 +11,7 @@ import { Header } from '@/components/layout/Header'
 import { AccountProvider } from '@/components/layout/AccountContext'
 import { AlertBannerWrapper } from '@/components/layout/AlertBannerWrapper'
 import type { AccountOption } from '@/components/layout/AccountContext'
+import { getTradeTotalPnl } from '@/lib/utils'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -29,9 +30,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Build account options for the switcher
   const accountOptions: AccountOption[] = []
   const accountDetails: Record<string, any> = {}
+  const accountPnl: Record<string, number> = {}
+
+  allTrades.forEach(trade => {
+    if (!trade.propFirmAccountId) return
+    accountPnl[trade.propFirmAccountId] = (accountPnl[trade.propFirmAccountId] ?? 0) + getTradeTotalPnl(trade)
+  })
 
   firms.forEach(firm => {
     firm.accounts.forEach(acc => {
+      const accountSize = Number(acc.accountSize)
+      const currentBalance = accountSize + (accountPnl[acc.id] ?? 0)
       accountOptions.push({
         id: acc.id,
         label: acc.accountLabel,
@@ -39,7 +48,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         firmColor: firm.logoColor ?? '#10b981',
         status: acc.status ?? 'active',
         stage: acc.stage ?? 'evaluation',
-        accountSize: Number(acc.accountSize),
+        accountSize,
+        currentBalance,
       })
       accountDetails[acc.id] = acc
     })

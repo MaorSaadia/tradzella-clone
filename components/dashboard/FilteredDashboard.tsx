@@ -9,6 +9,7 @@ import { PnLChart } from './PnLChart'
 import { WinLossChart } from './WinLossChart'
 import { RecentTrades } from './RecentTrades'
 import { ConnectBanner } from './ConnectBanner'
+import { TradingCalendar } from '@/components/analytics/TradingCalendar'
 import { Switch } from '@/components/ui/switch'
 import type { Trade } from '@/lib/db/schema'
 import { consolidateTradesAsTrades } from '@/lib/consolidateTrades'
@@ -65,6 +66,11 @@ export function FilteredDashboard({ allTrades, isConnected }: Props) {
           <PnLChart trades={displayTrades} />
         </div>
         <WinLossChart trades={displayTrades} />
+      </div>
+
+      <div className="space-y-2">
+        <h2 className="text-base font-black">Trading Diary</h2>
+        <TradingCalendar trades={displayTrades} />
       </div>
 
       <RecentTrades trades={displayTrades} />
