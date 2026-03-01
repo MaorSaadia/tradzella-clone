@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react'
 import NextImage from 'next/image'
 import { toast } from 'sonner'
-import { Loader2, Upload, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Upload, Trash2 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog'
@@ -13,6 +13,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn, formatCurrency, formatDateTime, getTradeTotalPnl } from '@/lib/utils'
 import type { Playbook, Trade } from '@/lib/db/schema'
 import { getTradePlaybookIds } from '@/lib/playbooks'
@@ -34,6 +41,21 @@ const PRESET_TAGS = [
   'Overtraded', 'Early Entry', 'Late Entry', 'Perfect', 'FOMO Entry',
 ]
 
+const MISTAKE_TYPES = [
+  { value: 'fomo_entry', label: 'FOMO Entry' },
+  { value: 'revenge_trade', label: 'Revenge Trade' },
+  { value: 'oversized_position', label: 'Oversized Position' },
+  { value: 'no_setup', label: 'No Clear Setup' },
+  { value: 'moved_stop', label: 'Moved Stop Loss' },
+  { value: 'held_through_news', label: 'Held Through News' },
+  { value: 'overtraded', label: 'Overtraded' },
+  { value: 'early_exit', label: 'Early Exit' },
+  { value: 'late_exit', label: 'Late Exit' },
+  { value: 'broke_daily_limit', label: 'Broke Daily Limit' },
+  { value: 'chased_price', label: 'Chased Price' },
+  { value: 'custom', label: 'Other' },
+] as const
+
 const GRADE_STYLES: Record<string, string> = {
   'A+': 'border-emerald-500 bg-emerald-500/15 text-emerald-500',
   'A':  'border-emerald-400 bg-emerald-400/10 text-emerald-400',
@@ -49,12 +71,27 @@ interface Props {
   onSaved: (updated: Trade) => void
 }
 
+type MistakeDraft = {
+  mistakeType: string
+  severity: string
+  description: string
+}
+
+function createEmptyMistakeDraft(): MistakeDraft {
+  return {
+    mistakeType: '',
+    severity: '2',
+    description: '',
+  }
+}
+
 export function TradeNoteModal({ trade, playbooks, onClose, onSaved }: Props) {
   const [grade, setGrade] = useState<string>('')
   const [emotion, setEmotion] = useState<string>('')
   const [tags, setTags] = useState<string[]>([])
   const [notes, setNotes] = useState('')
   const [playbookIds, setPlaybookIds] = useState<string[]>([])
+  const [mistakeLogs, setMistakeLogs] = useState<MistakeDraft[]>([createEmptyMistakeDraft()])
   const [screenshot, setScreenshot] = useState('')
   const [isDraggingScreenshot, setIsDraggingScreenshot] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -152,6 +189,7 @@ export function TradeNoteModal({ trade, playbooks, onClose, onSaved }: Props) {
       setTags(trade.tags ?? [])
       setNotes(trade.notes ?? '')
       setPlaybookIds(getTradePlaybookIds(trade))
+      setMistakeLogs([createEmptyMistakeDraft()])
       setScreenshot(trade.screenshot ?? '')
     }
   }, [trade])
@@ -168,6 +206,22 @@ export function TradeNoteModal({ trade, playbooks, onClose, onSaved }: Props) {
     setTags(prev =>
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     )
+  }
+
+  function updateMistakeDraft(index: number, patch: Partial<MistakeDraft>) {
+    setMistakeLogs(prev => prev.map((draft, i) => (
+      i === index ? { ...draft, ...patch } : draft
+    )))
+  }
+
+  function addMistakeDraft() {
+    setMistakeLogs(prev => [...prev, createEmptyMistakeDraft()])
+  }
+
+  function removeMistakeDraft(index: number) {
+    setMistakeLogs(prev => (
+      prev.length <= 1 ? [createEmptyMistakeDraft()] : prev.filter((_, i) => i !== index)
+    ))
   }
 
   async function handleSave() {
@@ -193,7 +247,33 @@ export function TradeNoteModal({ trade, playbooks, onClose, onSaved }: Props) {
         return
       }
 
-      const updated = await res.json()
+      let updated = await res.json()
+
+      const logsToCreate = mistakeLogs.filter(log => log.mistakeType)
+      if (logsToCreate.length > 0) {
+        const results = await Promise.allSettled(
+          logsToCreate.map(log => fetch('/api/mistakes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tradeId: trade.id,
+              mistakeType: log.mistakeType,
+              description: log.description,
+              severity: Number(log.severity),
+            }),
+          }))
+        )
+
+        const hasFailure = results.some(
+          result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok)
+        )
+        if (hasFailure) {
+          toast.error('Note saved, but some mistake logs failed')
+          return
+        }
+        updated = { ...updated, isMistake: true }
+      }
+
       toast.success('Trade note saved!')
       onSaved(updated)
     } catch {
@@ -361,6 +441,81 @@ export function TradeNoteModal({ trade, playbooks, onClose, onSaved }: Props) {
             onChange={e => setNotes(e.target.value)}
             className="min-h-24 text-sm resize-none"
           />
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Log Mistakes (optional)
+          </p>
+          <div className="space-y-3">
+            {mistakeLogs.map((log, index) => (
+              <div key={index} className="rounded-lg border border-border/70 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground">Mistake {index + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeMistakeDraft(index)}
+                    className="text-[11px] text-muted-foreground hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <Select
+                  value={log.mistakeType || 'none'}
+                  onValueChange={value => updateMistakeDraft(index, { mistakeType: value === 'none' ? '' : value })}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Select mistake type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No mistake</SelectItem>
+                    {MISTAKE_TYPES.map(type => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {log.mistakeType && (
+                  <>
+                    <div className="flex gap-2">
+                      {[
+                        { value: '1', label: 'Minor' },
+                        { value: '2', label: 'Moderate' },
+                        { value: '3', label: 'Major' },
+                      ].map(option => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => updateMistakeDraft(index, { severity: option.value })}
+                          className={cn(
+                            'flex-1 rounded-md border py-1.5 text-xs font-semibold transition-all',
+                            log.severity === option.value
+                              ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                              : 'border-border text-muted-foreground hover:border-border/80 hover:text-foreground'
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <Textarea
+                      placeholder="Why was this a mistake? (optional)"
+                      value={log.description}
+                      onChange={e => updateMistakeDraft(index, { description: e.target.value })}
+                      className="min-h-16 text-sm resize-none"
+                    />
+                  </>
+                )}
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={addMistakeDraft}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              Add Another Mistake
+            </Button>
+          </div>
         </div>
 
         {/* Screenshot */}

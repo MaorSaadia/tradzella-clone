@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
 
 // components/playbook/MistakeTracker.tsx
@@ -154,15 +153,42 @@ function LogMistakeModal({ open, onOpenChange, allTrades, onSaved }: LogMistakeM
 
 export function MistakeTracker({ allTrades, allMistakes, mistakeSummary, totalPnlLoss, onRefresh }: Props) {
   const [logOpen, setLogOpen] = useState(false)
+  const [deletingMistakeId, setDeletingMistakeId] = useState<string | null>(null)
 
   const mistakeTrades = allTrades.filter(t => t.isMistake)
   const cleanTrades = allTrades.filter(t => !t.isMistake)
   const mistakeRate = allTrades.length ? (mistakeTrades.length / allTrades.length) * 100 : 0
+  const tradeById = new Map(allTrades.map(t => [t.id, t] as const))
+  const recentMistakes = [...allMistakes]
+    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+    .slice(0, 20)
 
   const cleanWins = cleanTrades.filter(t => getTradeTotalPnl(t) > 0)
   const cleanWinRate = cleanTrades.length ? (cleanWins.length / cleanTrades.length) * 100 : 0
   const mistakeWins = mistakeTrades.filter(t => getTradeTotalPnl(t) > 0)
   const mistakeWinRate = mistakeTrades.length ? (mistakeWins.length / mistakeTrades.length) * 100 : 0
+
+  async function handleDeleteMistake(mistakeId: string) {
+    if (!confirm('Delete this mistake log?')) return
+    setDeletingMistakeId(mistakeId)
+    try {
+      const res = await fetch('/api/mistakes', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: mistakeId }),
+      })
+      if (!res.ok) {
+        toast.error('Failed to delete mistake log')
+        return
+      }
+      toast.success('Mistake log deleted')
+      onRefresh()
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setDeletingMistakeId(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -287,6 +313,45 @@ export function MistakeTracker({ allTrades, allMistakes, mistakeSummary, totalPn
                       <div className="h-full bg-red-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
+                </div>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent mistake logs */}
+      {recentMistakes.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Recent Logged Mistakes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {recentMistakes.map(m => {
+              const cfg = MISTAKE_CONFIG[m.mistakeType] ?? MISTAKE_CONFIG.custom
+              const trade = tradeById.get(m.tradeId)
+              return (
+                <div key={m.id} className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2">
+                  <span className="text-lg shrink-0">{cfg.emoji}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate">{cfg.label}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {trade ? `${trade.symbol} · ${new Date(trade.exitTime).toLocaleDateString()} · ${formatCurrency(getTradeTotalPnl(trade))}` : 'Trade not found'}
+                    </p>
+                    {m.description && (
+                      <p className="text-[11px] text-muted-foreground truncate">{m.description}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-red-500"
+                    onClick={() => handleDeleteMistake(m.id)}
+                    disabled={deletingMistakeId === m.id}
+                    aria-label="Delete mistake log"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               )
             })}
