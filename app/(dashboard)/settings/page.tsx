@@ -3,7 +3,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { tradovateAccounts } from '@/lib/db/schema'
+import { propFirmAccounts, propFirms, tradovateAccounts } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { TradovateSection } from '@/components/settings/TradovateSection'
 import { JournalSection } from '@/components/settings/JournalSection'
@@ -16,6 +16,27 @@ export default async function SettingsPage() {
 
   const account = await db.query.tradovateAccounts.findFirst({
     where: eq(tradovateAccounts.userId, session.user.id),
+  })
+  const firms = await db.query.propFirms.findMany({
+    where: eq(propFirms.userId, session.user.id),
+    columns: {
+      id: true,
+      name: true,
+    },
+  })
+  const accounts = await db.query.propFirmAccounts.findMany({
+    where: eq(propFirmAccounts.userId, session.user.id),
+    columns: {
+      id: true,
+      accountLabel: true,
+    },
+    with: {
+      propFirm: {
+        columns: {
+          name: true,
+        },
+      },
+    },
   })
 
   return (
@@ -37,7 +58,14 @@ export default async function SettingsPage() {
       <AccountSection user={session.user} />
 
       {/* Danger zone */}
-      <DangerSection />
+      <DangerSection
+        firms={firms}
+        accounts={accounts.map(account => ({
+          id: account.id,
+          accountLabel: account.accountLabel,
+          firmName: account.propFirm?.name ?? 'Unknown Firm',
+        }))}
+      />
     </div>
   )
 }

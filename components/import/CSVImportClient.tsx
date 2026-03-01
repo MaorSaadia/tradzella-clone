@@ -181,7 +181,25 @@ function toISOString(ts: string): string {
   const d = new Date(ts)
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()
 }
-
+function allocateCommissionByQty(trades: ParsedTrade[], totalFees: number): string[] {
+  const totalQty = trades.reduce((sum, t) => sum + t.qty, 0)
+  if (totalQty <= 0 || totalFees <= 0) {
+    return trades.map(() => '0.00')
+  }
+  const totalCents = Math.round(totalFees * 100)
+  const rawShares = trades.map(t => (totalCents * t.qty) / totalQty)
+  const cents = rawShares.map(v => Math.floor(v))
+  const remainder = totalCents - cents.reduce((sum, c) => sum + c, 0)
+  if (remainder > 0) {
+    const byFraction = rawShares
+      .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+      .sort((a, b) => b.frac - a.frac)
+    for (let r = 0; r < remainder; r++) {
+      cents[byFraction[r % byFraction.length].i] += 1
+    }
+  }
+  return cents.map(c => (c / 100).toFixed(2))
+}
 // ── Main Component ────────────────────────────────────────
 export function CSVImportClient() {
   const router = useRouter()
@@ -226,18 +244,16 @@ export function CSVImportClient() {
     setSaving(true)
     try {
       // Distribute total fees proportionally by contract qty across all trades
-      const feesNum    = parseFloat(totalFees) || 0
-      const totalQty   = trades.reduce((s, t) => s + t.qty, 0)
-      const payload = trades.map(t => ({
+      const feesNum = Math.max(0, parseFloat(totalFees) || 0)
+      const commissions = allocateCommissionByQty(trades, feesNum)
+      const payload = trades.map((t, i) => ({
         symbol: t.symbol,
         side: t.side,
         entryPrice: t.entryPrice.toString(),
         exitPrice: t.exitPrice.toString(),
         qty: t.qty,
         pnl: t.pnl.toString(),
-        commission: totalQty > 0
-          ? ((feesNum * t.qty) / totalQty).toFixed(2)
-          : '0',
+        commission: commissions[i] ?? '0.00',
         entryTime: toISOString(t.entryTime),
         exitTime: toISOString(t.exitTime),
         tradovateTradeId: `csv-${t.buyFillId}-${t.sellFillId}`,
@@ -558,3 +574,4 @@ export function CSVImportClient() {
     </div>
   )
 }
+
