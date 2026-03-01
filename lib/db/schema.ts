@@ -155,6 +155,7 @@ export const trades = pgTable('trades', {
   tradovateAccountId: uuid('tradovate_account_id').references(() => tradovateAccounts.id),
   propFirmAccountId: uuid('prop_firm_account_id').references(() => propFirmAccounts.id, { onDelete: 'set null' }),
   playbookId: uuid('playbook_id').references(() => playbooks.id, { onDelete: 'set null' }),
+  playbookIds: json('playbook_ids').$type<string[]>().default([]),
   tradovateTradeId: text('tradovate_trade_id').unique(),
   symbol: text('symbol').notNull(),
   side: sideEnum('side').notNull(),

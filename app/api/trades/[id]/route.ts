@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { trades } from '@/lib/db/schema'
+import { normalizePlaybookIds } from '@/lib/playbooks'
 import { eq, and } from 'drizzle-orm'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,9 +16,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json()
     const {
       notes, tags, grade, emotion, screenshot,
-      playbookId, isMistake,
+      playbookId, playbookIds, isMistake,
       propFirmAccountId,
     } = body
+
+    const normalizedPlaybookIds = playbookIds !== undefined
+      ? normalizePlaybookIds(playbookIds)
+      : undefined
+    const normalizedSinglePlaybookId =
+      playbookId !== undefined ? (typeof playbookId === 'string' && playbookId ? playbookId : null) : undefined
+    const finalPlaybookIds = normalizedPlaybookIds
+      ?? (normalizedSinglePlaybookId !== undefined
+        ? (normalizedSinglePlaybookId ? [normalizedSinglePlaybookId] : [])
+        : undefined)
+    const finalPrimaryPlaybookId = finalPlaybookIds
+      ? (finalPlaybookIds[0] ?? null)
+      : normalizedSinglePlaybookId
 
     const [updated] = await db.update(trades)
       .set({
@@ -26,7 +40,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(grade !== undefined && { grade }),
         ...(emotion !== undefined && { emotion }),
         ...(screenshot !== undefined && { screenshot }),
-        ...(playbookId !== undefined && { playbookId: playbookId || null }),
+        ...(finalPlaybookIds !== undefined && { playbookIds: finalPlaybookIds }),
+        ...(finalPrimaryPlaybookId !== undefined && { playbookId: finalPrimaryPlaybookId }),
         ...(isMistake !== undefined && { isMistake }),
         ...(propFirmAccountId !== undefined && { propFirmAccountId: propFirmAccountId || null }),
         updatedAt: new Date(),

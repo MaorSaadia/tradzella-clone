@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { trades, tradeMistakes, playbooks } from '@/lib/db/schema'
+import { getTradePlaybookIds } from '@/lib/playbooks'
 import { getTradeTotalPnl } from '@/lib/utils'
 import { eq, and, gte, lte, desc } from 'drizzle-orm'
 
@@ -66,15 +67,16 @@ function buildTradePayload(weekTrades: any[], mistakes: any[], allPlaybooks: any
   // Playbook performance
   const playbookPerf: Record<string, { pnl: number; trades: number; wins: number; name: string }> = {}
   weekTrades.forEach(t => {
-    if (t.playbookId) {
-      const pb = allPlaybooks.find((p: any) => p.id === t.playbookId)
+    const playbookIds = getTradePlaybookIds(t)
+    playbookIds.forEach(playbookId => {
+      const pb = allPlaybooks.find((p: any) => p.id === playbookId)
       if (pb) {
-        if (!playbookPerf[t.playbookId]) playbookPerf[t.playbookId] = { pnl: 0, trades: 0, wins: 0, name: pb.name }
-        playbookPerf[t.playbookId].pnl += getTradeTotalPnl(t)
-        playbookPerf[t.playbookId].trades++
-        if (getTradeTotalPnl(t) > 0) playbookPerf[t.playbookId].wins++
+        if (!playbookPerf[playbookId]) playbookPerf[playbookId] = { pnl: 0, trades: 0, wins: 0, name: pb.name }
+        playbookPerf[playbookId].pnl += getTradeTotalPnl(t)
+        playbookPerf[playbookId].trades++
+        if (getTradeTotalPnl(t) > 0) playbookPerf[playbookId].wins++
       }
-    }
+    })
   })
 
   // Mistake summary

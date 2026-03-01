@@ -21,6 +21,7 @@ export type ConsolidatedTrade = {
   qty: number
   pnl: number
   tags: string[]
+  playbookIds: string[]
   notes: string
   grade: Trade['grade']
   emotion: Trade['emotion']
@@ -49,6 +50,13 @@ export function consolidateTrades(trades: Trade[]): ConsolidatedTrade[] {
     const tags = Array.from(
       new Set(ordered.flatMap(t => t.tags ?? []))
     )
+    const playbookIds = Array.from(new Set(
+      ordered.flatMap(t => {
+        const fromArray = Array.isArray(t.playbookIds) ? t.playbookIds : []
+        if (fromArray.length > 0) return fromArray
+        return t.playbookId ? [t.playbookId] : []
+      })
+    ))
 
     const notes = ordered
       .map(t => t.notes?.trim())
@@ -85,6 +93,7 @@ export function consolidateTrades(trades: Trade[]): ConsolidatedTrade[] {
       qty,
       pnl,
       tags,
+      playbookIds,
       notes,
       grade,
       emotion,
@@ -104,6 +113,8 @@ export function consolidatedTradeToTrade(trade: ConsolidatedTrade): Trade {
     exitPrice: trade.avgExitPrice.toFixed(4),
     exitTime: trade.exitTime,
     tags: trade.tags,
+    playbookIds: trade.playbookIds,
+    playbookId: trade.playbookIds[0] ?? base.playbookId ?? null,
     notes: trade.notes,
     grade: trade.grade,
     emotion: trade.emotion,

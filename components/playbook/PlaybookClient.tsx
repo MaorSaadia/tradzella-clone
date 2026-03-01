@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn, formatCurrency , getTradeTotalPnl, } from '@/lib/utils'
+import { getTradePlaybookIds } from '@/lib/playbooks'
 import { PlaybookModal } from './PlaybookModal'
 import { PlaybookDetailPanel } from './PlaybookDetailPanel'
 import { MistakeTracker } from './MistakeTracker'
@@ -49,7 +50,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
   // ── Per-playbook stats ─────────────────────────────────
   const playbookStats = useMemo(() => {
     return playbooks.map(pb => {
-      const pbTrades = allTrades.filter(t => t.playbookId === pb.id)
+      const pbTrades = allTrades.filter(t => getTradePlaybookIds(t).includes(pb.id))
       const pnls = pbTrades.map(t => getTradeTotalPnl(t))
       const wins = pnls.filter(p => p > 0)
       const losses = pnls.filter(p => p < 0)
@@ -78,7 +79,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
 
   const totalMistakePnlLoss = mistakeSummary.reduce((s, m) => s + Math.min(m.pnlImpact, 0), 0)
   const mistakeTrades = allTrades.filter(t => t.isMistake).length
-  const cleanTrades = allTrades.filter(t => !t.isMistake && t.playbookId)
+  const cleanTrades = allTrades.filter(t => !t.isMistake && getTradePlaybookIds(t).length > 0)
   const cleanWinRate = cleanTrades.length
     ? (cleanTrades.filter(t => getTradeTotalPnl(t) > 0).length / cleanTrades.length) * 100
     : 0
@@ -301,7 +302,7 @@ export function PlaybookClient({ playbooks, allTrades, allMistakes }: Props) {
       {selectedPlaybook && (
         <PlaybookDetailPanel
           playbook={selectedPlaybook}
-          trades={allTrades.filter(t => t.playbookId === selectedPlaybook.id)}
+          trades={allTrades.filter(t => getTradePlaybookIds(t).includes(selectedPlaybook.id))}
           onClose={() => setSelectedPlaybook(null)}
           onRefresh={() => { setSelectedPlaybook(null); router.refresh() }}
         />

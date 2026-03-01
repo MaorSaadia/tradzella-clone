@@ -5,11 +5,17 @@
 import { useMemo } from 'react'
 import { useAccount } from '@/components/layout/AccountContext'
 import { TradeJournalClient } from './TradeJournalClient'
-import type { Trade } from '@/lib/db/schema'
+import type { Playbook, Trade } from '@/lib/db/schema'
 import { consolidateTrades } from '@/lib/consolidateTrades'
 import { useJournalConsolidatePartials } from '@/lib/useJournalConsolidatePartials'
 
-export function FilteredJournal({ allTrades }: { allTrades: Trade[] }) {
+export function FilteredJournal({
+  allTrades,
+  playbooks,
+}: {
+  allTrades: Trade[]
+  playbooks: Playbook[]
+}) {
   const { selected } = useAccount()
   const { consolidatePartials, updateConsolidatePartials } = useJournalConsolidatePartials()
 
@@ -37,6 +43,7 @@ export function FilteredJournal({ allTrades }: { allTrades: Trade[] }) {
       </div>
       <TradeJournalClient
         trades={trades}
+        playbooks={playbooks}
         consolidatePartials={consolidatePartials}
         onConsolidatePartialsChange={updateConsolidatePartials}
       />

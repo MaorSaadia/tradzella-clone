@@ -14,7 +14,8 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { cn, formatCurrency, formatDateTime, getTradeTotalPnl } from '@/lib/utils'
-import type { Trade } from '@/lib/db/schema'
+import type { Playbook, Trade } from '@/lib/db/schema'
+import { getTradePlaybookIds } from '@/lib/playbooks'
 
 // ── Config ────────────────────────────────────────────────
 const GRADES = ['A+', 'A', 'B', 'C', 'D'] as const
@@ -43,15 +44,17 @@ const GRADE_STYLES: Record<string, string> = {
 
 interface Props {
   trade: Trade | null
+  playbooks: Playbook[]
   onClose: () => void
   onSaved: (updated: Trade) => void
 }
 
-export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
+export function TradeNoteModal({ trade, playbooks, onClose, onSaved }: Props) {
   const [grade, setGrade] = useState<string>('')
   const [emotion, setEmotion] = useState<string>('')
   const [tags, setTags] = useState<string[]>([])
   const [notes, setNotes] = useState('')
+  const [playbookIds, setPlaybookIds] = useState<string[]>([])
   const [screenshot, setScreenshot] = useState('')
   const [isDraggingScreenshot, setIsDraggingScreenshot] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -148,9 +151,18 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
       setEmotion(trade.emotion ?? '')
       setTags(trade.tags ?? [])
       setNotes(trade.notes ?? '')
+      setPlaybookIds(getTradePlaybookIds(trade))
       setScreenshot(trade.screenshot ?? '')
     }
   }, [trade])
+
+  function togglePlaybook(id: string) {
+    setPlaybookIds(prev => (
+      prev.includes(id)
+        ? prev.filter(item => item !== id)
+        : [...prev, id]
+    ))
+  }
 
   function toggleTag(tag: string) {
     setTags(prev =>
@@ -170,6 +182,7 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
           emotion: emotion || null,
           tags,
           notes,
+          playbookIds,
           screenshot: screenshot || null,
         }),
       })
@@ -309,6 +322,35 @@ export function TradeNoteModal({ trade, onClose, onSaved }: Props) {
         </div>
 
         {/* ── Notes ── */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Strategies
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {playbooks.map(pb => {
+              const selected = playbookIds.includes(pb.id)
+              return (
+                <button
+                  key={pb.id}
+                  type="button"
+                  onClick={() => togglePlaybook(pb.id)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-md border text-xs font-semibold transition-all',
+                    selected
+                      ? 'border-blue-500/50 bg-blue-500/10 text-blue-400'
+                      : 'border-border text-muted-foreground hover:border-border/80 hover:text-foreground'
+                  )}
+                >
+                  {selected ? 'Selected ' : ''}{pb.emoji} {pb.name}
+                </button>
+              )
+            })}
+            {playbooks.length === 0 && (
+              <span className="text-xs text-muted-foreground">No strategies created yet</span>
+            )}
+          </div>
+        </div>
+
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
             Notes

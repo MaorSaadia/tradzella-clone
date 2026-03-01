@@ -20,7 +20,8 @@ import {
 } from '@/components/ui/select'
 import { TradeNoteModal } from './TradeNoteModal'
 import { cn, formatCurrency, formatDateTime, calcStats, getTradeTotalPnl } from '@/lib/utils'
-import type { Trade } from '@/lib/db/schema'
+import type { Playbook, Trade } from '@/lib/db/schema'
+import { getTradePlaybookIds } from '@/lib/playbooks'
 import { consolidateTrades, type ConsolidatedTrade } from '@/lib/consolidateTrades'
 
 const PAGE_SIZE = 20
@@ -43,12 +44,14 @@ const EMOTION_ICONS: Record<string, string> = {
 
 interface Props {
   trades: Trade[]
+  playbooks: Playbook[]
   consolidatePartials: boolean
   onConsolidatePartialsChange: (value: boolean) => void
 }
 
 export function TradeJournalClient({
   trades,
+  playbooks,
   consolidatePartials,
   onConsolidatePartialsChange,
 }: Props) {
@@ -56,6 +59,7 @@ export function TradeJournalClient({
   const [sideFilter, setSideFilter] = useState<'all' | 'long' | 'short'>('all')
   const [resultFilter, setResultFilter] = useState<'all' | 'win' | 'loss'>('all')
   const [symbolFilter, setSymbolFilter] = useState('all')
+  const [strategyFilter, setStrategyFilter] = useState('all')
   const [sortKey, setSortKey] = useState<SortKey>('exitTime')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
@@ -78,6 +82,10 @@ export function TradeJournalClient({
     () => consolidateTrades(localTrades),
     [localTrades]
   )
+  const playbookById = useMemo(
+    () => new Map(playbooks.map(pb => [pb.id, pb] as const)),
+    [playbooks]
+  )
 
   // Unique symbols for filter dropdown
   const symbols = useMemo(() =>
@@ -96,6 +104,13 @@ export function TradeJournalClient({
       if (resultFilter === 'win' && pnl <= 0) return false
       if (resultFilter === 'loss' && pnl >= 0) return false
       if (symbolFilter !== 'all' && t.symbol !== symbolFilter) return false
+      if (strategyFilter !== 'all') {
+        const strategyIds = consolidatePartials
+          ? (t as ConsolidatedTrade).playbookIds
+          : getTradePlaybookIds(t as Trade)
+        if (strategyFilter === 'none' && strategyIds.length > 0) return false
+        if (strategyFilter !== 'none' && !strategyIds.includes(strategyFilter)) return false
+      }
       if (search) {
         const q = search.toLowerCase()
         const notes = (t.notes ?? '').toLowerCase()
@@ -125,7 +140,7 @@ export function TradeJournalClient({
     return result
   }, [
     localTrades, consolidatedTrades, consolidatePartials, sideFilter,
-    resultFilter, symbolFilter, search, sortKey, sortDir
+    resultFilter, symbolFilter, strategyFilter, search, sortKey, sortDir
   ])
 
   // Stats for filtered set
@@ -145,6 +160,8 @@ export function TradeJournalClient({
         notes: t.notes,
         grade: t.grade,
         emotion: t.emotion,
+        playbookIds: t.playbookIds,
+        playbookId: t.playbookIds[0] ?? base.playbookId ?? null,
       } as Trade
     })
     return calcStats(consolidatedAsTrades)
@@ -182,6 +199,8 @@ export function TradeJournalClient({
             grade: updated.grade,
             emotion: updated.emotion,
             screenshot: updated.screenshot,
+            playbookIds: updated.playbookIds,
+            playbookId: updated.playbookId,
           }
         : t
     )))
@@ -192,6 +211,8 @@ export function TradeJournalClient({
       grade: updated.grade ?? null,
       emotion: updated.emotion ?? null,
       screenshot: updated.screenshot ?? null,
+      playbookIds: getTradePlaybookIds(updated),
+      playbookId: updated.playbookId ?? null,
     }
 
     const otherIds = idsToSync.filter(id => id !== updated.id)
@@ -298,6 +319,7 @@ export function TradeJournalClient({
     sideFilter !== 'all' && sideFilter,
     resultFilter !== 'all' && resultFilter,
     symbolFilter !== 'all' && symbolFilter,
+    strategyFilter !== 'all' && (strategyFilter === 'none' ? 'no strategy' : (playbookById.get(strategyFilter)?.name ?? 'strategy')),
     search && `"${search}"`,
   ].filter(Boolean)
 
@@ -325,6 +347,22 @@ export function TradeJournalClient({
             {symbols.map(s => (
               <SelectItem key={s} value={s} className="text-xs">
                 {s === 'all' ? 'All Symbols' : s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Strategy */}
+        <Select value={strategyFilter} onValueChange={v => { setStrategyFilter(v); setPage(1) }}>
+          <SelectTrigger className="h-9 w-40 text-xs">
+            <SelectValue placeholder="Strategy" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">All Strategies</SelectItem>
+            <SelectItem value="none" className="text-xs">No Strategy</SelectItem>
+            {playbooks.map(pb => (
+              <SelectItem key={pb.id} value={pb.id} className="text-xs">
+                {pb.emoji} {pb.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -367,7 +405,14 @@ export function TradeJournalClient({
         {/* Clear */}
         {activeFilters.length > 0 && (
           <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground"
-            onClick={() => { setSearch(''); setSideFilter('all'); setResultFilter('all'); setSymbolFilter('all'); setPage(1) }}>
+            onClick={() => {
+              setSearch('')
+              setSideFilter('all')
+              setResultFilter('all')
+              setSymbolFilter('all')
+              setStrategyFilter('all')
+              setPage(1)
+            }}>
             Clear filters
           </Button>
         )}
@@ -414,6 +459,7 @@ export function TradeJournalClient({
                   { label: 'P&L',         key: 'pnl' as SortKey },
                   { label: 'Grade',       key: null },
                   { label: 'Tags',        key: null },
+                  { label: 'Strategies',  key: null },
                   { label: 'Notes',       key: null },
                 ].map(col => (
                   <th key={col.label}
@@ -434,7 +480,7 @@ export function TradeJournalClient({
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-16 text-sm text-muted-foreground">
+                  <td colSpan={11} className="text-center py-16 text-sm text-muted-foreground">
                     {localTrades.length === 0
                       ? 'No trades yet — import a CSV to get started'
                       : 'No trades match your filters'}
@@ -453,6 +499,9 @@ export function TradeJournalClient({
                   const notes = isGrouped ? (item as ConsolidatedTrade).notes : (trade.notes ?? '')
                   const grade = isGrouped ? (item as ConsolidatedTrade).grade : trade.grade
                   const emotion = isGrouped ? (item as ConsolidatedTrade).emotion : trade.emotion
+                  const strategyIds = isGrouped
+                    ? (item as ConsolidatedTrade).playbookIds
+                    : getTradePlaybookIds(trade)
                   const groupKey = isGrouped ? (item as ConsolidatedTrade).key : null
                   const partials = isGrouped ? (item as ConsolidatedTrade).partials : []
                   const groupTradeIds = partials.map(p => p.id)
@@ -571,6 +620,32 @@ export function TradeJournalClient({
                           </div>
                         </td>
 
+                        {/* Strategies */}
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1 flex-wrap">
+                            {strategyIds.length > 0 ? (
+                              strategyIds.slice(0, 2).map(id => {
+                                const pb = playbookById.get(id)
+                                if (!pb) return null
+                                return (
+                                  <Badge key={id} variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                    {pb.emoji} {pb.name}
+                                  </Badge>
+                                )
+                              })
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
+                                + strategy
+                              </span>
+                            )}
+                            {strategyIds.length > 2 && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                +{strategyIds.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+
                         {/* Notes preview */}
                         <td className="px-4 py-3 max-w-40">
                           {emotion && (
@@ -590,7 +665,7 @@ export function TradeJournalClient({
 
                       {isGrouped && isExpanded && partials.length > 0 && (
                         <tr className="border-b border-border/50 bg-accent/20">
-                          <td colSpan={10} className="px-4 py-3">
+                          <td colSpan={11} className="px-4 py-3">
                             <div
                               className={cn(
                                 'space-y-1.5 rounded-lg p-1.5 transition-colors',
@@ -747,6 +822,7 @@ export function TradeJournalClient({
       {/* Note modal */}
       <TradeNoteModal
         trade={selectedTrade}
+        playbooks={playbooks}
         onClose={() => {
           setSelectedTrade(null)
           setSelectedGroupTradeIds([])
