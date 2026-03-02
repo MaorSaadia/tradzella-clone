@@ -26,8 +26,6 @@ const PROP_FIRMS = [
       { label: 'Apex 50K Eval',    profitTarget: 3000,  maxDrawdown: 2500,  dailyLossLimit: 1500, hasDailyLimit: false,  minDays: 7,  maxDays: 0,  trailing: true,  consistency50: false  },
       { label: 'Apex 100K Eval',   profitTarget: 6000,  maxDrawdown: 3000,  dailyLossLimit: 3000, hasDailyLimit: false,  minDays: 7,  maxDays: 0,  trailing: true,  consistency50: false  },
       { label: 'Apex 150K Eval',   profitTarget: 9000,  maxDrawdown: 4500,  dailyLossLimit: 4500, hasDailyLimit: false,  minDays: 7,  maxDays: 0,  trailing: true,  consistency50: false  },
-      { label: 'Apex 300K Eval',   profitTarget: 20000,  maxDrawdown: 7000,  dailyLossLimit: 7000, hasDailyLimit: false, minDays: 7,  maxDays: 0,  trailing: true,  consistency50: false  },
-
     ],
   },
   {

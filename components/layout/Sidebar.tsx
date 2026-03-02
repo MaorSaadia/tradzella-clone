@@ -8,7 +8,7 @@ import Link from 'next/link'
 import {
   LayoutDashboard, BookOpen, BarChart3, Building2,
   Upload, Settings, LogOut, GitCompare, ChevronRight,
-  FileText, Brain, CalendarClock, Sun,
+  FileText, Brain, CalendarClock, Sun, Trophy,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -37,6 +37,7 @@ const NAV = [
     items: [
       { href: '/ai',         icon: Brain,          label: 'AI Chat',        },
       { href: '/session-prep', icon: Sun,          label: 'Session Prep',   },
+      { href: '/challenge-coach', icon: Trophy,    label: 'Challenge Coach' },
       { href: '/review',     icon: CalendarClock,  label: 'Weekly Review',   },
     ],
   },
