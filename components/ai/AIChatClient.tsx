@@ -137,12 +137,13 @@ function AccountSelector({
 
 // ── Main Component ─────────────────────────────────────────
 export function AIChatClient() {
+  const { accounts, selected, setSelected } = useAccount()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [focusAccountId, setFocusAccountId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const focusAccountId = selected?.id ?? null
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -157,7 +158,11 @@ export function AIChatClient() {
 
   // Reset conversation when account focus changes
   function handleAccountChange(id: string | null) {
-    setFocusAccountId(id)
+    if (!id) {
+      setSelected(null)
+    } else {
+      setSelected(accounts.find(a => a.id === id) ?? null)
+    }
     if (messages.length > 0) setMessages([])
   }
 

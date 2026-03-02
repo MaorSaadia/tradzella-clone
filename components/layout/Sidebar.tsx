@@ -27,7 +27,7 @@ const NAV = [
   {
     section: 'STRATEGY',
     items: [
-      { href: '/playbook',   icon: FileText,    label: 'Playbook',    badge: 'NEW' },
+      { href: '/playbook',   icon: FileText,    label: 'Playbook',    },
       { href: '/compare',    icon: GitCompare,  label: 'Compare',     badge: 'NEW' },
       { href: '/propfirms',  icon: Building2,   label: 'Prop Firms' },
     ],
@@ -35,8 +35,8 @@ const NAV = [
   {
     section: 'AI COACH',
     items: [
-      { href: '/ai',         icon: Brain,          label: 'AI Chat',        badge: 'AI' },
-      { href: '/review',     icon: CalendarClock,  label: 'Weekly Review',  badge: 'AI' },
+      { href: '/ai',         icon: Brain,          label: 'AI Chat',        },
+      { href: '/review',     icon: CalendarClock,  label: 'Weekly Review',   },
     ],
   },
   {
@@ -85,12 +85,8 @@ export function Sidebar({ user }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto py-4 px-3">
         {NAV.map(section => (
           <div key={section.section} className="mb-5">
-            <p className={cn(
-              "text-[9px] font-bold uppercase tracking-widest px-2 mb-1.5",
-              section.section === 'AI COACH'
-                ? 'text-violet-400/80'
-                : 'text-muted-foreground/50'
-            )}>
+            <p className=
+             "text-[9px] font-bold uppercase tracking-widest px-2 mb-1.5 text-muted-foreground/50" >
               {section.section}
             </p>
             {section.items.map(item => {
