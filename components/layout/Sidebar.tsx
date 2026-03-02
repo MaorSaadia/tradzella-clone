@@ -8,7 +8,7 @@ import Link from 'next/link'
 import {
   LayoutDashboard, BookOpen, BarChart3, Building2,
   Upload, Settings, LogOut, GitCompare, ChevronRight,
-  Sparkles, FileText,
+  FileText, Brain, CalendarClock,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -27,10 +27,16 @@ const NAV = [
   {
     section: 'STRATEGY',
     items: [
-      { href: '/playbook',   icon: FileText,    label: 'Playbook' },
-      { href: '/review',     icon: Sparkles,    label: 'Weekly Review'},
-      { href: '/compare',    icon: GitCompare,  label: 'Compare' },
+      { href: '/playbook',   icon: FileText,    label: 'Playbook',    badge: 'NEW' },
+      { href: '/compare',    icon: GitCompare,  label: 'Compare',     badge: 'NEW' },
       { href: '/propfirms',  icon: Building2,   label: 'Prop Firms' },
+    ],
+  },
+  {
+    section: 'AI COACH',
+    items: [
+      { href: '/ai',         icon: Brain,          label: 'AI Chat',        badge: 'AI' },
+      { href: '/review',     icon: CalendarClock,  label: 'Weekly Review',  badge: 'AI' },
     ],
   },
   {
@@ -67,8 +73,8 @@ export function Sidebar({ user }: SidebarProps) {
           alt="MS"
           className="h-8 w-auto object-contain shrink-0"
         />
-        <span className="font-black text-base tracking-tight -ml-3">
-          <span className="text-emerald-400">MS</span><span className="text-slate-900 dark:text-white">Funded</span>
+        <span className="font-black text-base tracking-tight">
+          <span className="text-emerald-400">MS</span><span className="text-white">Funded</span>
         </span>
         <Badge variant="outline" className="text-[9px] px-1.5 py-0 ml-auto border-emerald-500/30 text-emerald-500">
           BETA
@@ -79,13 +85,18 @@ export function Sidebar({ user }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto py-4 px-3">
         {NAV.map(section => (
           <div key={section.section} className="mb-5">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-2 mb-1.5">
+            <p className={cn(
+              "text-[9px] font-bold uppercase tracking-widest px-2 mb-1.5",
+              section.section === 'AI COACH'
+                ? 'text-violet-400/80'
+                : 'text-muted-foreground/50'
+            )}>
               {section.section}
             </p>
             {section.items.map(item => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               const Icon = item.icon
-              // const isAI = item.badge === 'AI'
+              const isAI = item.badge === 'AI'
               return (
                 <Link
                   key={item.href}
@@ -99,16 +110,16 @@ export function Sidebar({ user }: SidebarProps) {
                 >
                   <Icon className={cn('w-4 h-4 shrink-0', isActive && 'text-emerald-500')} />
                   <span className="flex-1">{item.label}</span>
-                  {/* {item.badge && (
+                  {item.badge && (
                     <Badge className={cn(
                       'text-[9px] px-1.5 py-0 h-4 font-bold',
                       isAI
-                        ? 'bg-violet-500 text-white'
+                        ? 'to-emerald-500 text-white border-0'
                         : 'bg-emerald-500 text-black'
                     )}>
                       {item.badge}
                     </Badge>
-                  )} */}
+                  )}
                   {isActive && <ChevronRight className="w-3 h-3 text-emerald-500" />}
                 </Link>
               )

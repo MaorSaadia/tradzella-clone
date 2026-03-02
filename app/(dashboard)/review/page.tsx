@@ -9,7 +9,7 @@ import { eq, desc } from 'drizzle-orm'
 import { WeeklyReviewClient } from '@/components/review/WeeklyReviewClient'
 
 interface Props {
-  searchParams: { accountId?: string }
+  searchParams: Promise<{ accountId?: string }>
 }
 
 export default async function ReviewPage({ searchParams }: Props) {
@@ -20,7 +20,8 @@ export default async function ReviewPage({ searchParams }: Props) {
   // The layout/header should append ?accountId=xxx when navigating to /review
   // or you can read it from a cookie / server-side context — whatever your
   // AccountContext pattern uses. For simplicity we read it from searchParams.
-  const propFirmAccountId = searchParams.accountId ?? null
+  const resolvedSearchParams = await searchParams
+  const propFirmAccountId = resolvedSearchParams?.accountId ?? null
 
   const [allTrades, savedReviews] = await Promise.all([
     db.query.trades.findMany({
